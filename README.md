@@ -1,1 +1,6 @@
-# euclid_and_markov_at_the_pub
+# Euclid and Markov at the Pub
+
+Euclidean sequencer with on-scale Markov chain.
+
+- Input: Clock-in
+- Output: CV/Gate
