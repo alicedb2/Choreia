@@ -17,8 +17,8 @@ Each of the 2 sequencer has two pots
 
 ### Parameters
 
-- **Scale dispersion**: Width of a Cauchy distribution controlling how wide the jumps within the scales are on average,
-- **Stay on note**: Weight of the probability of playing the same note one after another,
+- **Scale dispersion** Width of a Cauchy distribution controlling how wide the jumps within the scales are on average,
+- **Stay on note** Weight of the probability of playing the same note one after another,
 - **Step on first neighbor** Weight of the probability of playing jumping to the first neighbor on the scale,
 - **Root note** Weight of the probability of playing the root note.
 
