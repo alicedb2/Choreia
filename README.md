@@ -31,8 +31,8 @@ For now the parameters are hard coded.
 ### TODO
 
 - Two click buttons. 
--- Hold one to change the four parameters of the Markov chain with pots.
--- Hold the other to change the scale and root note with two of the pots, the seed that generates the Markov chain with the third pot, and the fourth pot is left unused for now.
+    - Hold one to change the four parameters of the Markov chain with pots.
+    - Hold the other to change the scale and root note with two of the pots, the seed that generates the Markov chain with the third pot, and the fourth pot is left unused for now.
 - CV-in jack to control the Euclidean sequence itself.
 - Add a second clock-in jack. When only one clock-in is connected both sequences have the same gate duty. When two are connected each sequencer follows its own clock-in duty.
 
