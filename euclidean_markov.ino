@@ -36,13 +36,16 @@ volatile bool reset_gate2 = false;
 long int scale = ABHOGI;
 uint8_t scale_width = 12;
 uint8_t bpm = 107;
-uint8_t gate_probability = 100;
+uint8_t gate_probability = 100; // Deprecated. The Euclidean sequence is already good enough
+                                //             as it is and more musical anyway.
 
 
 // BPM to delay
 uint8_t eucl1_steps_per_bar = 16;
 uint8_t eucl2_steps_per_bar = 16;
 
+// The gate duty has been deprecated. Instead it follows the
+// duty of clock-in.
 // 7% seems like the shortest duty cycle the DAC will transmit
 //float gate1_duty = 50;
 //float gate2_duty = 50;
