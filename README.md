@@ -1,6 +1,6 @@
 # Euclid and Markov at the Pub
 
-Euclidean sequencer with on-scale Markov chain.
+Euclidean sequencer with in-scale Markov chain.
 
 ### Jacks
 
@@ -12,7 +12,7 @@ Euclidean sequencer with on-scale Markov chain.
 Each of the 2 sequencer has two pots
 
 - **Pot 1** Cycles through the 16 canonical Euclidean sequences, i.e. events at the integer part of 16k/N where k runs from 0 to 15 and N is the value at the pots between 0 and 16. We define int(16k/0) := 0.
-- **Pot 2** Adds a number of shadow steps, i.e. events happen at the integer part of 16(k + s)/N where s runs from 0 to whatever. Here it's from 0 to 16. There's a redundancy k and s but we increase the number of possible sequences to 32.
+- **Pot 2** Adds a number of shadow steps, i.e. events happen at the integer part of 16(k + s)/N where s runs from 0 to whatever. Here it's from 0 to 16. This increase the total number of possible sequences to more than 200.
 
 
 ### Parameters
@@ -23,8 +23,8 @@ The generation of the Markov transition matrix takes five parameters:
 - **Scale width** How far across notes the Markov chain will, i.e. 13 would be from C0 to C1. For now the scale width can only go to 20, so from C0 to G1, because of the 2KB limitation of the Arduino nano's dynamic memory, i.e. 20 * 20 * 4 bytes per floats.
 - **Scale dispersion** Width of a Cauchy distribution controlling how wide the jumps within the scales are on average,
 - **Stay on note** Weight of the probability of playing the same note one after another,
-- **Step on first neighbor** Weight of the probability of playing jumping to the first neighbor on the scale,
-- **Root note** Weight of the probability of playing the root note.
+- **Step on first neighbor** Weight of the probability of playing the first neighbor of a note in the scale after itself,
+- **Root note** Weight of the probability of playing the root note whatever the current note is.
 
 
 ### Quirk
