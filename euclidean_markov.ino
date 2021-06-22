@@ -20,8 +20,8 @@ uint8_t current_eucl1_shadow_steps = 0, current_eucl2_shadow_steps = 0;
 /////////////////////////////////////////
 // Global tunable sequencer parameters //
 /////////////////////////////////////////
-bool tune_mode = true;
-bool clockin_mode = true;
+bool tune_mode = false;
+uint8_t tune_seq = 2;
 
 //volatile bool eucl1_tictoc = false;
 //volatile bool eucl2_tictoc = false;
@@ -34,10 +34,12 @@ volatile bool reset_gate2 = false;
 //volatile long int interrupt_millis = 0;
 
 long int scale = ABHOGI;
-uint8_t scale_width = 12;
-uint8_t bpm = 107;
+
+// scale_width=16 is the maximum the 2KB dynamic memory
+// of the Arduino nano will take considering
+uint8_t scale_width = 16;
 uint8_t gate_probability = 100; // Deprecated. The Euclidean sequence is already good enough
-                                //             as it is and more musical anyway.
+//             as it is and more musical anyway.
 
 
 // BPM to delay
@@ -101,7 +103,7 @@ void setup() {
   lcd.clear();
 
   if (tune_mode) {
-    input_and_play_semitone();
+    input_and_play_semitone(tune_seq);
   }
 
 
@@ -143,7 +145,7 @@ void setup() {
 
   initialize_step_variables(eucl1_sequence_alternates, eucl1_sequence_direction, eucl1_sequence_step, eucl1_previous_sequence_step);
   initialize_step_variables(eucl2_sequence_alternates, eucl2_sequence_direction, eucl2_sequence_step, eucl2_previous_sequence_step);
-  
+
   copy_array_uint8(EMPTY_16EVENTS, eucl1_gate_events, 16);
   copy_array_uint8(EMPTY_16EVENTS, eucl2_gate_events, 16);
 
@@ -272,7 +274,7 @@ void conditional_play_note(
       digitalWrite(LED_BUILTIN, HIGH);
 
       // Tell loop to reset gate after duty cycle
-// 
+      //
     }
 
 
@@ -394,19 +396,19 @@ void read_and_set_euclidean_sequence(uint8_t step_pin, uint8_t &nb_eucl_events, 
   uint16_t fine_bin;
 
   new_nbevents = map(euclset_read, 0, in_max + 1 , 0, out_max + 1);
-
-  fine_bin = map(euclset_read, -(in_max + 1) / (out_max + 1) / 2 / 2, in_max + 1 + (in_max + 1) / (out_max + 1) / 2 / 2, 0, (2 * out_max + 1) + 1);
-  if (!(fine_bin % 2)) {
-    new_nbevents = nb_eucl_events;
-  }
+  //
+    fine_bin = map(euclset_read, -(in_max + 1) / (out_max + 1) / 2 / 2, in_max + 1 + (in_max + 1) / (out_max + 1) / 2 / 2, 0, (2 * out_max + 1) + 1);
+    if (!(fine_bin % 2)) {
+      new_nbevents = nb_eucl_events;
+    }
 
   shadow_read = analogRead(shadow_pin);
   new_shadow_steps = map(shadow_read, 0, in_max + 1, 0, out_max + 1);
 
-  fine_bin = map(shadow_read, -(in_max + 1) / (out_max + 1) / 2 / 2, in_max + 1 + (in_max + 1) / (out_max + 1) / 2 / 2, 0, (2 * out_max + 1) + 1);
-  if (!(fine_bin % 2)) {
-    new_shadow_steps = eucl_shadow_steps;
-  }
+    fine_bin = map(shadow_read, -(in_max + 1) / (out_max + 1) / 2 / 2, in_max + 1 + (in_max + 1) / (out_max + 1) / 2 / 2, 0, (2 * out_max + 1) + 1);
+    if (!(fine_bin % 2)) {
+      new_shadow_steps = eucl_shadow_steps;
+    }
 
 
   if ((new_nbevents != nb_eucl_events) or (new_shadow_steps != eucl_shadow_steps)) {
@@ -591,7 +593,18 @@ uint8_t draw_semitone_from_markov_matrix(float * markov_matrix, uint8_t initial_
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-void input_and_play_semitone() {
+void input_and_play_semitone(uint8_t seq) {
+  if (seq == 1) {
+    lcd.clear();
+    lcd.setCursor(0 ,1);
+    lcd.print("Tuning Seq 1"); 
+  } else if (tune_seq == 2) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Tuning Seq 2");
+  }
+  
+  
   Serial.println("");
   for (;;) {
     char received = ' '; // Each character received
@@ -608,10 +621,18 @@ void input_and_play_semitone() {
     }
     inData.trim(); // Eliminate \n, \r, blank and other not “printable”
     Serial.println();
-    analogWrite(CVOUT1_PIN, inData.toInt());
-    digitalWrite(GATE1_PIN, HIGH);
-    delay(100);
-    digitalWrite(GATE1_PIN, LOW);
+
+    if (seq == 1) {
+      analogWrite(CVOUT1_PIN, inData.toInt());
+      digitalWrite(GATE1_PIN, HIGH);
+      delay(100);
+      digitalWrite(GATE1_PIN, LOW);
+    } else if (seq == 2) {
+      analogWrite(CVOUT2_PIN, inData.toInt());
+      digitalWrite(GATE2_PIN, HIGH);
+      delay(100);
+      digitalWrite(GATE2_PIN, LOW);
+    }
   }
 
 }
@@ -675,14 +696,19 @@ void tictoc() {
 
   // Assume we begin in the toc state (tic_toc == false)
   tic_toc = !tic_toc;
-  
+
   if (tic_toc) {
     eucl1_advance = true;
     eucl2_advance = true;
 
     reset_gate1 = false;
     reset_gate2 = false;
+
   } else {
+
+    //    eucl1_advance = false;
+    //    eucl1_advance = false;
+
     reset_gate1 = true;
     reset_gate2 = true;
   }
