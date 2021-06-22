@@ -11,7 +11,7 @@ Euclidean sequencer with in-scale Markov chain.
 
 Each of the 2 sequencer has two pots
 
-- **Pot 1** Cycles through the 16 canonical Euclidean sequences, i.e. events at the integer part of 16k/N where k runs from 0 to 15 and N is the value at the pots between 0 and 16. We define int(16k/0) := 0.
+- **Pot 1** Cycles through the 16 canonical Euclidean sequences, i.e. events at the integer part of 16k/N where k runs from 0 to 15 and N is the value at the pots between 0 and 16. When N = 0 the sequence is empty.
 - **Pot 2** Adds a number of shadow steps, i.e. events happen at the integer part of 16(k + s)/N where s runs from 0 to whatever. Here it's from 0 to 16. This increase the total number of possible sequences to more than 200.
 
 
