@@ -19,10 +19,13 @@ Each of the 2 sequencer has two pots
 
 For now the parameters are hard coded.
 
+The generation of the Markov transition matrix takes five parameters:
+- **Scale width** How far across notes the Markov chain will, i.e. 13 would be from C0 to C1. For now the scale width can only go to 20, so from C0 to G1, because of the 2KB limitation of the Arduino nano's dynamic memory, i.e. 20 * 20 * 4 bytes per floats.
 - **Scale dispersion** Width of a Cauchy distribution controlling how wide the jumps within the scales are on average,
 - **Stay on note** Weight of the probability of playing the same note one after another,
 - **Step on first neighbor** Weight of the probability of playing jumping to the first neighbor on the scale,
 - **Root note** Weight of the probability of playing the root note.
+
 
 ### Quirk
 
@@ -30,6 +33,7 @@ For now the parameters are hard coded.
 
 ### TODO
 
+- Get rid of the maximum scale width of 20 by only considering the state space of notes that are on the scale. Simply use a map from kth note on the scale to semitone rather than including all semitones and wasting space with empty rows and columns in the Markov transition matrix.
 - Two click buttons. 
     - Hold one to change the four parameters of the Markov chain with pots.
     - Hold the other to change the scale and root note with two of the pots, the seed that generates the Markov chain with the third pot, and the fourth pot is left unused for now.
