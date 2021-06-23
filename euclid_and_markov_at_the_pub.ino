@@ -5,7 +5,7 @@
 const uint8_t rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 8, d7 = 7;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
-
+bool led_state = false;
 
 uint8_t eucl1_gate_events[16];
 uint8_t eucl2_gate_events[16];
@@ -17,11 +17,28 @@ int8_t eucl2_previous_sequence_step;
 uint8_t current_nb_eucl1_events = 0, current_nb_eucl2_events = 0;
 uint8_t current_eucl1_shadow_steps = 0, current_eucl2_shadow_steps = 0;
 
+
+////////////////////////////////////////////////////////////////
+// Those big glitchy pots suck so let's use a running average //
+////////////////////////////////////////////////////////////////
+#define RUNNING_AVERAGE_LENGTH 7
+uint16_t circ_buffer_euclset1_reads[RUNNING_AVERAGE_LENGTH];
+uint16_t circ_buffer_euclset2_reads[RUNNING_AVERAGE_LENGTH];
+uint16_t circ_buffer_shadow1_reads[RUNNING_AVERAGE_LENGTH];
+uint16_t circ_buffer_shadow2_reads[RUNNING_AVERAGE_LENGTH];
+
+uint8_t curr_euclset1_buffer_idx = 0;
+uint8_t curr_shadow1_buffer_idx = 0;
+uint8_t curr_euclset2_buffer_idx = 0;
+uint8_t curr_shadow2_buffer_idx = 0;
+////////////////////////////////////////////////////////////////
+
+
 /////////////////////////////////////////
 // Global tunable sequencer parameters //
 /////////////////////////////////////////
 bool tune_mode = false;
-uint8_t tune_seq = 2;
+uint8_t tune_seq = 0;
 
 //volatile bool eucl1_tictoc = false;
 //volatile bool eucl2_tictoc = false;
@@ -33,7 +50,7 @@ volatile bool reset_gate2 = false;
 
 //volatile long int interrupt_millis = 0;
 
-long int scale = ABHOGI;
+long int scale = RYUKUAN;
 
 // scale_width=16 is the maximum the 2KB dynamic memory
 // of the Arduino nano will take considering
@@ -61,7 +78,6 @@ int8_t eucl2_sequence_direction = 1;
 /////////////////////////////////////////
 /////////////////////////////////////////
 
-
 void setup() {
   // put your setup code here, to run once:
 
@@ -87,6 +103,12 @@ void setup() {
   pinMode(CLOCKIN_PIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(CLOCKIN_PIN), tictoc, CHANGE);
 
+  //  pinMode(A6, OUTPUT);
+  //  pinMode(3, INPUT);
+  ////  digitalWrite(3, /);
+  //  attachInterrupt(digitalPinToInterrupt(3), led, CHANGE);
+
+
   Serial.begin(115200);
   Serial.println("");
 
@@ -106,6 +128,14 @@ void setup() {
     input_and_play_semitone(tune_seq);
   }
 
+  uint16_t circ_buffer_euclset1_reads[RUNNING_AVERAGE_LENGTH];
+  uint8_t curr_euclset1_buffer_idx = 0;
+
+
+  memset(circ_buffer_euclset1_reads, analogRead(SETEUCL1_PIN), RUNNING_AVERAGE_LENGTH);
+  memset(circ_buffer_euclset2_reads, analogRead(SETEUCL2_PIN), RUNNING_AVERAGE_LENGTH);
+  memset(circ_buffer_shadow1_reads, analogRead(SETEUCL1SHADOW_PIN), RUNNING_AVERAGE_LENGTH);
+  memset(circ_buffer_shadow2_reads, analogRead(SETEUCL2SHADOW_PIN), RUNNING_AVERAGE_LENGTH);
 
   ////////////////////////////////////////////////
   /// Generate random Markov transition matrix ///
@@ -132,8 +162,8 @@ void setup() {
                   (scale,
                    3.0,   // scale_dispersion
                    0.33,  // stay_on_note
-                   0.33,  // step_on_first_neighbors
-                   0.1,   // root_note_reweight
+                   1,  // step_on_first_neighbors
+                   0.5,   // root_note_reweight
                    scale_width, scale_width);
 
   print_float_array(markov_matrix, scale_width, scale_width);
@@ -149,8 +179,17 @@ void setup() {
   copy_array_uint8(EMPTY_16EVENTS, eucl1_gate_events, 16);
   copy_array_uint8(EMPTY_16EVENTS, eucl2_gate_events, 16);
 
-  read_and_set_euclidean_sequence(SETEUCL1_PIN, current_nb_eucl1_events, SETEUCL1SHADOW_PIN, current_eucl1_shadow_steps, eucl1_steps_per_bar, eucl1_gate_events, FILLED_LOWO, 1);
-  read_and_set_euclidean_sequence(SETEUCL2_PIN, current_nb_eucl2_events, SETEUCL2SHADOW_PIN, current_eucl2_shadow_steps, eucl2_steps_per_bar, eucl2_gate_events, FILLED_HIGHO, 0);
+  read_and_set_euclidean_sequence(circular_running_average(analogRead(SETEUCL2_PIN), circ_buffer_euclset2_reads, curr_euclset2_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  circular_running_average(analogRead(SETEUCL2SHADOW_PIN), circ_buffer_shadow2_reads, curr_shadow2_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  current_nb_eucl2_events,
+                                  current_eucl2_shadow_steps,
+                                  eucl2_steps_per_bar, eucl2_gate_events, FILLED_HIGHO, 0);
+  read_and_set_euclidean_sequence(circular_running_average(analogRead(SETEUCL1_PIN), circ_buffer_euclset1_reads, curr_euclset1_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  circular_running_average(analogRead(SETEUCL1SHADOW_PIN), circ_buffer_shadow1_reads, curr_shadow1_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  current_nb_eucl1_events,
+                                  current_eucl1_shadow_steps,
+                                  eucl1_steps_per_bar, eucl1_gate_events, FILLED_LOWO, 1);
+
 }
 
 
@@ -171,14 +210,22 @@ void loop() {
   /////////////////////////////////////
   // READ AND SET EUCLIDEAN SEQUENCE //
   /////////////////////////////////////
-  read_and_set_euclidean_sequence(SETEUCL1_PIN, current_nb_eucl1_events, SETEUCL1SHADOW_PIN, current_eucl1_shadow_steps, eucl1_steps_per_bar, eucl1_gate_events, FILLED_LOWO, 1);
-  read_and_set_euclidean_sequence(SETEUCL2_PIN, current_nb_eucl2_events, SETEUCL2SHADOW_PIN, current_eucl2_shadow_steps, eucl2_steps_per_bar, eucl2_gate_events, FILLED_HIGHO, 0);
-
+  read_and_set_euclidean_sequence(circular_running_average(analogRead(SETEUCL2_PIN), circ_buffer_euclset2_reads, curr_euclset2_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  circular_running_average(analogRead(SETEUCL2SHADOW_PIN), circ_buffer_shadow2_reads, curr_shadow2_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  current_nb_eucl2_events,
+                                  current_eucl2_shadow_steps,
+                                  eucl2_steps_per_bar, eucl2_gate_events, FILLED_HIGHO, 0);
+  read_and_set_euclidean_sequence(circular_running_average(analogRead(SETEUCL1_PIN), circ_buffer_euclset1_reads, curr_euclset1_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  circular_running_average(analogRead(SETEUCL1SHADOW_PIN), circ_buffer_shadow1_reads, curr_shadow1_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  current_nb_eucl1_events,
+                                  current_eucl1_shadow_steps,
+                                  eucl1_steps_per_bar, eucl1_gate_events, FILLED_LOWO, 1);
 
   /////////////////
   // GATE EVENTS //
   /////////////////
   conditional_play_note(CVOUT1_PIN, GATE1_PIN,
+                        semitone_cvs_1,
                         eucl1_advance,
                         eucl1_first_sequence_step,
                         eucl1_sequence_step,
@@ -196,6 +243,7 @@ void loop() {
                         1);
 
   conditional_play_note(CVOUT2_PIN, GATE2_PIN,
+                        semitone_cvs_2,
                         eucl2_advance,
                         eucl2_first_sequence_step,
                         eucl2_sequence_step,
@@ -223,6 +271,7 @@ void loop() {
 
 void conditional_play_note(
   uint8_t cv_pin, uint8_t gate_pin,
+  uint8_t *semitone_cvs,
   volatile bool &advance,
   bool &first_sequence_step,
   int8_t &eucl_sequence_step,
@@ -241,6 +290,7 @@ void conditional_play_note(
 
   bool gate_condition;
   uint8_t current_semitone;
+
 
   //  if ((clockin_mode && advance) ||
   //      (!clockin_mode && (first_sequence_step || millis() - last_gate_millis >= millis_per_step))) {
@@ -359,56 +409,38 @@ void conditional_reset_gate(uint8_t gate_pin,
 }
 
 
-//////////////////////////////
-void initialize_step_variables(bool eucl_sequence_alternates, int8_t &eucl_sequence_direction, int8_t &eucl_sequence_step, int8_t &eucl_previous_sequence_step) {
 
-  if (eucl_sequence_alternates) {
-    eucl_sequence_direction = 1;
-    eucl_sequence_step = 0;
-    eucl_previous_sequence_step = 0;
+/////////////////////////////////
+uint16_t circular_running_average(uint16_t new_read, uint16_t *circ_buffer, uint8_t &curr_buffer_idx, uint8_t buffer_length) {
+  //  Serial.println(new_read);
+  //  delay(1000);
+  uint16_t total = 0;
+  uint16_t average;
+  curr_buffer_idx = (++curr_buffer_idx) % buffer_length;
+  circ_buffer[curr_buffer_idx] = new_read;
 
-  } else if (eucl_sequence_direction == 1) {
-    eucl_sequence_step = 0;
-    eucl_previous_sequence_step = 15;
-
-  } else if (eucl_sequence_direction == -1) {
-    eucl_sequence_step = 15;
-    eucl_previous_sequence_step = 0;
+  for (uint8_t k = 0; k < buffer_length; k++) {
+    total += circ_buffer[k];
   }
 
+  average = (uint16_t)(int(total / buffer_length));
+
+  return average;
 }
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-void read_and_set_euclidean_sequence(uint8_t step_pin, uint8_t &nb_eucl_events, uint8_t shadow_pin, uint8_t &eucl_shadow_steps, uint8_t steps_per_bar, uint8_t *gate_events, char step_char, uint8_t column) {
+void read_and_set_euclidean_sequence(uint16_t new_euclset_read, uint16_t new_shadow_read, uint8_t &nb_eucl_events, uint8_t &eucl_shadow_steps, uint8_t steps_per_bar, uint8_t *gate_events, char step_char, uint8_t column) {
   uint8_t new_nbevents, new_shadow_steps;
   uint16_t euclset_read, shadow_read;
   uint8_t event_location;
 
-  euclset_read = analogRead(step_pin);
-
-  // 1024 rather than 1023 and 17 rather than 16 because
-  // only inMax is mapped to outMax. This way we ensure
-  // that only 1024 (which can never be AnalogRead)
-  // maps to 17, and every other intervals from
-
   uint16_t in_max = 1023, out_max = 16;
   uint16_t fine_bin;
 
-  new_nbevents = map(euclset_read, 0, in_max + 1 , 0, out_max + 1);
-  //
-    fine_bin = map(euclset_read, -(in_max + 1) / (out_max + 1) / 2 / 2, in_max + 1 + (in_max + 1) / (out_max + 1) / 2 / 2, 0, (2 * out_max + 1) + 1);
-    if (!(fine_bin % 2)) {
-      new_nbevents = nb_eucl_events;
-    }
+  new_nbevents = map(new_euclset_read, 0, in_max + 1 , 0, out_max + 1);
 
-  shadow_read = analogRead(shadow_pin);
-  new_shadow_steps = map(shadow_read, 0, in_max + 1, 0, out_max + 1);
-
-    fine_bin = map(shadow_read, -(in_max + 1) / (out_max + 1) / 2 / 2, in_max + 1 + (in_max + 1) / (out_max + 1) / 2 / 2, 0, (2 * out_max + 1) + 1);
-    if (!(fine_bin % 2)) {
-      new_shadow_steps = eucl_shadow_steps;
-    }
+  new_shadow_steps = map(new_shadow_read, 0, in_max + 1, 0, out_max + 1);
 
 
   if ((new_nbevents != nb_eucl_events) or (new_shadow_steps != eucl_shadow_steps)) {
@@ -431,6 +463,26 @@ void read_and_set_euclidean_sequence(uint8_t step_pin, uint8_t &nb_eucl_events, 
       }
     }
   }
+}
+
+
+//////////////////////////////
+void initialize_step_variables(bool eucl_sequence_alternates, int8_t &eucl_sequence_direction, int8_t &eucl_sequence_step, int8_t &eucl_previous_sequence_step) {
+
+  if (eucl_sequence_alternates) {
+    eucl_sequence_direction = 1;
+    eucl_sequence_step = 0;
+    eucl_previous_sequence_step = 0;
+
+  } else if (eucl_sequence_direction == 1) {
+    eucl_sequence_step = 0;
+    eucl_previous_sequence_step = 15;
+
+  } else if (eucl_sequence_direction == -1) {
+    eucl_sequence_step = 15;
+    eucl_previous_sequence_step = 0;
+  }
+
 }
 
 
@@ -594,17 +646,23 @@ uint8_t draw_semitone_from_markov_matrix(float * markov_matrix, uint8_t initial_
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 void input_and_play_semitone(uint8_t seq) {
-  if (seq == 1) {
+  if (seq == 0) {
     lcd.clear();
-    lcd.setCursor(0 ,1);
-    lcd.print("Tuning Seq 1"); 
+    lcd.setCursor(0, 0);
+    lcd.print("Tuning seq 1 & 2");
+    lcd.setCursor(0, 1);
+    lcd.print("Tuning seq 1 & 2");
+  } else if (seq == 1) {
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("Tuning seq 1");
   } else if (tune_seq == 2) {
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("Tuning Seq 2");
+    lcd.print("Tuning seq 2");
   }
-  
-  
+
+
   Serial.println("");
   for (;;) {
     char received = ' '; // Each character received
@@ -621,13 +679,25 @@ void input_and_play_semitone(uint8_t seq) {
     }
     inData.trim(); // Eliminate \n, \r, blank and other not “printable”
     Serial.println();
+    if (seq == 0) {
 
-    if (seq == 1) {
+      analogWrite(CVOUT1_PIN, inData.toInt());
+      analogWrite(CVOUT2_PIN, inData.toInt());
+      digitalWrite(GATE1_PIN, HIGH);
+      digitalWrite(GATE2_PIN, HIGH);
+      delay(100);
+      digitalWrite(GATE1_PIN, LOW);
+      digitalWrite(GATE2_PIN, LOW);
+
+    } else if (seq == 1) {
+
       analogWrite(CVOUT1_PIN, inData.toInt());
       digitalWrite(GATE1_PIN, HIGH);
       delay(100);
       digitalWrite(GATE1_PIN, LOW);
+
     } else if (seq == 2) {
+
       analogWrite(CVOUT2_PIN, inData.toInt());
       digitalWrite(GATE2_PIN, HIGH);
       delay(100);
@@ -643,22 +713,22 @@ void input_and_play_semitone(uint8_t seq) {
 
 
 ///////////////
-void setupPWM16() {
-  DDRB |= _BV(PB1) | _BV(PB2);        /* set pins as outputs */
-  TCCR1A = _BV(COM1A1) | _BV(COM1B1)  /* non-inverting PWM */
-           | _BV(WGM11);                   /* mode 14: fast PWM, TOP=ICR1 */
-  TCCR1B = _BV(WGM13) | _BV(WGM12)
-           | _BV(CS11);                    /* prescaler: clock / 8 */
-  ICR1 = 0xffff;                      /* TOP counter value (freeing OCR1A*/
-}
-
-void analogWrite16(uint8_t pin, uint16_t val)
-{
-  switch (pin) {
-    case  9: OCR1A = val; break;
-    case 10: OCR1B = val; break;
-  }
-}
+//void setupPWM16() {
+//  DDRB |= _BV(PB1) | _BV(PB2);        /* set pins as outputs */
+//  TCCR1A = _BV(COM1A1) | _BV(COM1B1)  /* non-inverting PWM */
+//           | _BV(WGM11);                   /* mode 14: fast PWM, TOP=ICR1 */
+//  TCCR1B = _BV(WGM13) | _BV(WGM12)
+//           | _BV(CS11);                    /* prescaler: clock / 8 */
+//  ICR1 = 0xffff;                      /* TOP counter value (freeing OCR1A*/
+//}
+//
+//void analogWrite16(uint8_t pin, uint16_t val)
+//{
+//  switch (pin) {
+//    case  9: OCR1A = val; break;
+//    case 10: OCR1B = val; break;
+//  }
+//}
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
