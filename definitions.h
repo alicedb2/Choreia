@@ -16,45 +16,49 @@
 #define EUCL1_COLUMN 1
 #define EUCL2_COLUMN 2
 
-uint8_t semitone_cvs[] = {
-  0,  // C0
-  3,
-  9,
-  13,
-  18,
-  24,  
-  32,
-  39,
-  46,
-  53,
-  60,
-  65,
-  70,  // C1
-  75,
-  80,
-  85,
-  89,
-  93,
-  97,
-  101,
-  105,
-  108,
-  111,
-  114,
-  118, // C2
-  121,
-  124,
-  127,
-  130,
-  132,
-  135,
-  138,
-  141,
-  144,
-  147,
-  150,
-  153  // C3
-  
+// Tuning sucks. 
+// Use a voltmeter and measure voltage
+// between pole of the capacitor of the
+// low pass filter and fiddle with the
+// x value passed to analogWrite(CVOUT1_PIN, x)
+// to get as close to 1/12 mV per semitone.
+// Triple check your x's.
+uint8_t semitone_cvs_1[] = {
+  0,  // 0.00 mV C0
+  6,  // 83 mV
+  12, // 167 mV
+  18, // 250 mV
+  24, // 333 mV
+  30, // 417 mV
+  36, // 500 mV
+  43, // 583 mV
+  49, // 667 mV
+  56, // 750 mV
+  62, // 833 mV
+  68, // 917 0 mV
+  73, // 1000 mV C1
+  78, // 1083 mV
+  83, // 1167 mV
+  88 // 1250 mV
+};
+
+uint8_t semitone_cvs_2[] {
+  0,  // 0.00 mV C0
+  5,  // 83 mV
+  11, // 167 mV
+  17, // 250 mV
+  22, // 333 mV
+  28, // 417 mV
+  34, // 500 mV
+  40, // 583 mV
+  47, // 667 mV
+  53, // 750 mV
+  59, // 833 mV
+  65, // 917 0 mV
+  71, // 1000 mV C1
+  76,
+  81,
+  85
 };
 
 byte Filled_lowo[8] =
