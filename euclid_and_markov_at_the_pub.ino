@@ -40,6 +40,12 @@ uint8_t curr_shadow2_buffer_idx = 0;
 bool tune_mode = false;
 uint8_t tune_seq = 0;
 
+// 12=C0, 24=C1, 36=C2, 48=C3, 60=C4, etc.
+uint8_t midi_root_note = 36; // C4
+uint8_t midi_note_velocity = 100;
+uint8_t current_midi_note_seq1 = 0, current_midi_note_seq2 = 0;
+uint8_t seq1_midi_channel = 0, seq2_midi_channel = 1;
+
 //volatile bool eucl1_tictoc = false;
 //volatile bool eucl2_tictoc = false;
 volatile bool tic_toc = false;
@@ -50,7 +56,7 @@ volatile bool reset_gate2 = false;
 
 //volatile long int interrupt_millis = 0;
 
-long int scale = RYUKUAN;
+long int scale = ABHOGI;
 
 // scale_width=16 is the maximum the 2KB dynamic memory
 // of the Arduino nano will take considering
@@ -97,17 +103,14 @@ void setup() {
 
   pinMode(LED_BUILTIN, OUTPUT);
 
-
   //  setupPWM16();
 
   pinMode(CLOCKIN_PIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(CLOCKIN_PIN), tictoc, CHANGE);
 
-  //  pinMode(A6, OUTPUT);
-  //  pinMode(3, INPUT);
-  ////  digitalWrite(3, /);
-  //  attachInterrupt(digitalPinToInterrupt(3), led, CHANGE);
-
+  //  Serial.flush();
+  //  Serial.begin(31250);
+  //  Serial.flush();
 
   Serial.begin(115200);
   Serial.println("");
@@ -130,7 +133,6 @@ void setup() {
 
   uint16_t circ_buffer_euclset1_reads[RUNNING_AVERAGE_LENGTH];
   uint8_t curr_euclset1_buffer_idx = 0;
-
 
   memset(circ_buffer_euclset1_reads, analogRead(SETEUCL1_PIN), RUNNING_AVERAGE_LENGTH);
   memset(circ_buffer_euclset2_reads, analogRead(SETEUCL2_PIN), RUNNING_AVERAGE_LENGTH);
@@ -166,7 +168,17 @@ void setup() {
                    0.5,   // root_note_reweight
                    scale_width, scale_width);
 
-  print_float_array(markov_matrix, scale_width, scale_width);
+  //  print_float_array(markov_matrix, scale_width, scale_width);
+
+  //  for (uint8_t note = 0; note < 128; note++) {
+  //    // reset notes
+  //    midiWrite(0x80 | seq1_midi_channel, note, 0);
+  //    // reset pitch bend
+  //    midiWrite(0xE0 | seq1_midi_channel, 0, 0);
+  //
+  //    midiWrite(0x80 | seq2_midi_channel, note, 0);
+  //    midiWrite(0xE0 | seq2_midi_channel, 0, 0);
+  //  }
 
 
   //////////////////////////////////////////
@@ -225,6 +237,8 @@ void loop() {
   // GATE EVENTS //
   /////////////////
   conditional_play_note(CVOUT1_PIN, GATE1_PIN,
+                        current_midi_note_seq1,
+                        seq1_midi_channel,
                         semitone_cvs_1,
                         eucl1_advance,
                         eucl1_first_sequence_step,
@@ -243,6 +257,8 @@ void loop() {
                         1);
 
   conditional_play_note(CVOUT2_PIN, GATE2_PIN,
+                        current_midi_note_seq2,
+                        seq2_midi_channel,
                         semitone_cvs_2,
                         eucl2_advance,
                         eucl2_first_sequence_step,
@@ -260,10 +276,8 @@ void loop() {
                         EMPTY_CHAR,
                         0);
 
-  conditional_reset_gate(GATE1_PIN, //eucl1_millis_per_step, last_gate1_millis, gate1_duty,
-                         reset_gate1);
-  conditional_reset_gate(GATE2_PIN, // eucl2_millis_per_step, last_gate2_millis, gate2_duty,
-                         reset_gate2);
+  conditional_reset_gate(GATE1_PIN, reset_gate1, current_midi_note_seq1, seq1_midi_channel);
+  conditional_reset_gate(GATE2_PIN, reset_gate2, current_midi_note_seq2, seq2_midi_channel);
 }
 
 
@@ -271,6 +285,8 @@ void loop() {
 
 void conditional_play_note(
   uint8_t cv_pin, uint8_t gate_pin,
+  uint8_t &current_midi_note,
+  uint8_t midi_channel,
   uint8_t *semitone_cvs,
   volatile bool &advance,
   bool &first_sequence_step,
@@ -278,10 +294,8 @@ void conditional_play_note(
   int8_t &eucl_previous_sequence_step,
   bool eucl_sequence_alternates,
   int8_t &eucl_sequence_direction,
-  //  float millis_per_step,
   uint8_t *eucl_gate_events,
   volatile bool &reset_gate,
-  //  long unsigned int &last_gate_millis,
   char step_char,
   char bar_step_char,
   char bar_char,
@@ -291,19 +305,10 @@ void conditional_play_note(
   bool gate_condition;
   uint8_t current_semitone;
 
-
-  //  if ((clockin_mode && advance) ||
-  //      (!clockin_mode && (first_sequence_step || millis() - last_gate_millis >= millis_per_step))) {
   if (advance) {
-
     first_sequence_step = false;
 
     advance = false;
-
-    //    Serial.println(millis() - interrupt_millis);
-    //    interrupt_millis = millis();
-
-    //    last_gate_millis = millis();
 
     gate_condition = (random(0, 101) <= gate_probability);
 
@@ -313,18 +318,17 @@ void conditional_play_note(
       // PITCH CV CHANGE //
       /////////////////////
       uint8_t semitone_cv;
-      uint8_t octave;
 
       current_semitone = draw_semitone_from_markov_matrix(markov_matrix, current_semitone, scale_width);
 
-      semitone_cv = semitone_cvs[current_semitone];
-
-      analogWrite(cv_pin, semitone_cv);
+      analogWrite(cv_pin, semitone_cvs[current_semitone]);
       digitalWrite(gate_pin, HIGH);
+
+      //      current_midi_note = midi_root_note + current_semitone;
+      //      midiWrite(0x90 | midi_channel, current_midi_note, midi_note_velocity);
+
       digitalWrite(LED_BUILTIN, HIGH);
 
-      // Tell loop to reset gate after duty cycle
-      //
     }
 
 
@@ -397,14 +401,12 @@ void on_off_step_display(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////
-void conditional_reset_gate(uint8_t gate_pin,
-                            //float millis_per_step, long unsigned int &last_gate_millis, uint8_t gate_duty,
-                            volatile bool &reset_gate) {
+void conditional_reset_gate(uint8_t gate_pin, volatile bool &reset_gate, uint8_t current_midi_note, uint8_t midi_channel) {
   if (reset_gate) {
     reset_gate = false;
     digitalWrite(gate_pin, LOW);
+    //    midiWrite(0x80 | midi_channel, current_midi_note, 0);
     digitalWrite(LED_BUILTIN, LOW);
-
   }
 }
 
@@ -783,4 +785,10 @@ void tictoc() {
     reset_gate2 = true;
   }
 
+}
+
+void midiWrite(uint8_t cmd, uint8_t pitch, uint8_t velocity) {
+  Serial.write(cmd);
+  Serial.write(pitch);
+  Serial.write(velocity);
 }
