@@ -1,7 +1,7 @@
 #define SETEUCL1_PIN A0
 #define SETEUCL2_PIN A1
-#define SETEUCL1SHADOW_PIN A2
-#define SETEUCL2SHADOW_PIN A3
+#define SETEUCL1SHADOW_PIN A6
+#define SETEUCL2SHADOW_PIN A7
 
 #define BUTTON_PIN 3
 #define CLOCKIN_PIN 2
@@ -31,7 +31,7 @@ uint8_t semitone_cvs_1[] = {
   24, // 333 mV
   30, // 417 mV
   36, // 500 mV
-  43, // 583 mV
+  42, // 583 mV
   49, // 667 mV
   56, // 750 mV
   62, // 833 mV
