@@ -1,73 +1,73 @@
+#include <avr/pgmspace.h>
+#include <LiquidCrystal.h>
+#include <Wire.h>
+#include <MCP4725.h>
+#include <ADS1X15.h>
+
 #include "scales.h"
 #include "definitions.h"
-#include <LiquidCrystal.h>
+
+
+MCP4725 MCP(0x60);
+//ADS1115 ADS(0x48);
 
 const uint8_t rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 8, d7 = 7;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 bool led_state = false;
 
-uint8_t eucl1_gate_events[16];
-uint8_t eucl2_gate_events[16];
+uint8_t eucl_gate_events[16];
 
-int8_t eucl1_sequence_step;
-int8_t eucl2_sequence_step;
-int8_t eucl1_previous_sequence_step;
-int8_t eucl2_previous_sequence_step;
-uint8_t current_nb_eucl1_events = 0, current_nb_eucl2_events = 0;
-uint8_t current_eucl1_shadow_steps = 0, current_eucl2_shadow_steps = 0;
+int8_t eucl_sequence_step;
+int8_t eucl_previous_sequence_step;
+uint8_t current_nb_eucl_events = 0;
+uint8_t current_eucl_shadow_steps = 0;
+int8_t current_sequence_rotation = 0;
+uint8_t current_scale = 0;
 
 
 ////////////////////////////////////////////////////////////////
 // Those big glitchy pots suck so let's use a running average //
 ////////////////////////////////////////////////////////////////
 #define RUNNING_AVERAGE_LENGTH 7
-uint16_t circ_buffer_euclset1_reads[RUNNING_AVERAGE_LENGTH];
-uint16_t circ_buffer_euclset2_reads[RUNNING_AVERAGE_LENGTH];
-uint16_t circ_buffer_shadow1_reads[RUNNING_AVERAGE_LENGTH];
-uint16_t circ_buffer_shadow2_reads[RUNNING_AVERAGE_LENGTH];
+uint16_t circ_buffer_euclset_reads[RUNNING_AVERAGE_LENGTH];
+uint16_t circ_buffer_shadow_reads[RUNNING_AVERAGE_LENGTH];
+uint16_t circ_buffer_sequence_rotation_reads[RUNNING_AVERAGE_LENGTH];
+uint16_t circ_buffer_scale_reads[RUNNING_AVERAGE_LENGTH];
 
-uint8_t curr_euclset1_buffer_idx = 0;
-uint8_t curr_shadow1_buffer_idx = 0;
-uint8_t curr_euclset2_buffer_idx = 0;
-uint8_t curr_shadow2_buffer_idx = 0;
+uint8_t curr_euclset_buffer_idx = 0;
+uint8_t curr_shadow_buffer_idx = 0;
+uint8_t curr_sequence_rotation_buffer_idx = 0;
+uint8_t curr_scale_buffer_idx = 0;
 ////////////////////////////////////////////////////////////////
 
 
 /////////////////////////////////////////
 // Global tunable sequencer parameters //
 /////////////////////////////////////////
-bool tune_mode = false;
-uint8_t tune_seq = 0;
+bool tuning_mode = false;
 
-// 12=C0, 24=C1, 36=C2, 48=C3, 60=C4, etc.
-uint8_t midi_root_note = 36; // C4
-uint8_t midi_note_velocity = 100;
-uint8_t current_midi_note_seq1 = 0, current_midi_note_seq2 = 0;
-uint8_t seq1_midi_channel = 0, seq2_midi_channel = 1;
-
-//volatile bool eucl1_tictoc = false;
-//volatile bool eucl2_tictoc = false;
 volatile bool tic_toc = false;
-volatile bool eucl1_advance = false;
-volatile bool eucl2_advance = false;
+volatile bool eucl_advance = false;
 volatile bool reset_gate1 = false;
-volatile bool reset_gate2 = false;
 
 //volatile long int interrupt_millis = 0;
 
 long int scale = ABHOGI;
 
+uint8_t root_note = 6;
+
+
 // scale_width=16 is the maximum the 2KB dynamic memory
 // of the Arduino nano will take considering
+// TODO state space = notes in the scale, then use array states[state] = semitone_in_scale
 uint8_t scale_width = 16;
 uint8_t gate_probability = 100; // Deprecated. The Euclidean sequence is already good enough
 //             as it is and more musical anyway.
 
 
 // BPM to delay
-uint8_t eucl1_steps_per_bar = 16;
-uint8_t eucl2_steps_per_bar = 16;
+uint8_t eucl_steps_per_bar = 16;
 
 // The gate duty has been deprecated. Instead it follows the
 // duty of clock-in.
@@ -75,11 +75,10 @@ uint8_t eucl2_steps_per_bar = 16;
 //float gate1_duty = 50;
 //float gate2_duty = 50;
 
-bool eucl1_sequence_alternates = true;
-bool eucl2_sequence_alternates = false;
+bool eucl_sequence_alternates = true;
 
-int8_t eucl1_sequence_direction = 1;
-int8_t eucl2_sequence_direction = 1;
+int8_t eucl_sequence_direction = 1;
+
 /////////////////////////////////////////
 /////////////////////////////////////////
 /////////////////////////////////////////
@@ -89,31 +88,33 @@ void setup() {
 
   //  randomSeed(42);
 
+  pinMode(SETEUCL_PIN, INPUT);
+  pinMode(SETEUCLSHADOW_PIN, INPUT);
+  pinMode(SETROTATION_PIN, INPUT);
+  pinMode(SETSCALE_PIN, INPUT);
 
   pinMode(CLOCKIN_PIN, INPUT);
-  pinMode(SETEUCL1_PIN, INPUT);
-  pinMode(SETEUCL2_PIN, INPUT);
-  pinMode(SETEUCL1SHADOW_PIN, INPUT);
-  pinMode(SETEUCL2SHADOW_PIN, INPUT);
-
-  pinMode(CVOUT1_PIN, OUTPUT);
-  pinMode(GATE1_PIN, OUTPUT);
-  pinMode(CVOUT2_PIN, OUTPUT);
-  pinMode(GATE2_PIN, OUTPUT);
+  pinMode(CVOUT_PIN, OUTPUT);
+  pinMode(GATE_PIN, OUTPUT);
 
   pinMode(LED_BUILTIN, OUTPUT);
-
-  //  setupPWM16();
 
   pinMode(CLOCKIN_PIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(CLOCKIN_PIN), tictoc, CHANGE);
 
-  //  Serial.flush();
-  //  Serial.begin(31250);
-  //  Serial.flush();
-
+  Serial.flush();
   Serial.begin(115200);
-  Serial.println("");
+  Serial.flush();
+
+  Wire.begin();
+  Wire.setClock(400000);
+
+  MCP.begin();
+  //  Serial.println(MCP.isConnected());
+
+  //  ADS.begin();
+  //  ADS.setGain(0);
+  //  Serial.println(ADS.isConnected());
 
   //////////////////////////////////////////////
   /// Start LCD and Upload custom characters ///
@@ -127,17 +128,17 @@ void setup() {
   lcd.createChar(5, Overbar);
   lcd.clear();
 
-  if (tune_mode) {
-    input_and_play_semitone(tune_seq);
+  if (tuning_mode) {
+    input_and_play_semitone();
   }
 
-  uint16_t circ_buffer_euclset1_reads[RUNNING_AVERAGE_LENGTH];
-  uint8_t curr_euclset1_buffer_idx = 0;
+  uint16_t circ_buffer_euclset_reads[RUNNING_AVERAGE_LENGTH];
+  uint8_t curr_euclset_buffer_idx = 0;
 
-  memset(circ_buffer_euclset1_reads, analogRead(SETEUCL1_PIN), RUNNING_AVERAGE_LENGTH);
-  memset(circ_buffer_euclset2_reads, analogRead(SETEUCL2_PIN), RUNNING_AVERAGE_LENGTH);
-  memset(circ_buffer_shadow1_reads, analogRead(SETEUCL1SHADOW_PIN), RUNNING_AVERAGE_LENGTH);
-  memset(circ_buffer_shadow2_reads, analogRead(SETEUCL2SHADOW_PIN), RUNNING_AVERAGE_LENGTH);
+  memset(circ_buffer_euclset_reads, analogRead(SETEUCL_PIN), RUNNING_AVERAGE_LENGTH);
+  memset(circ_buffer_shadow_reads, analogRead(SETEUCLSHADOW_PIN), RUNNING_AVERAGE_LENGTH);
+  memset(circ_buffer_sequence_rotation_reads, analogRead(SETROTATION_PIN), RUNNING_AVERAGE_LENGTH);
+  memset(circ_buffer_scale_reads, analogRead(SETSCALE_PIN), RUNNING_AVERAGE_LENGTH);
 
   ////////////////////////////////////////////////
   /// Generate random Markov transition matrix ///
@@ -162,46 +163,30 @@ void setup() {
 
   markov_matrix = generate_random_markov_matrix_from_scale
                   (scale,
-                   3.0,   // scale_dispersion
+                   2.0,   // scale_dispersion
                    0.33,  // stay_on_note
-                   1,  // step_on_first_neighbors
-                   0.5,   // root_note_reweight
+                   0.33,  // step_on_first_neighbors
+                   0.33,   // root_note_reweight
                    scale_width, scale_width);
-
-  //  print_float_array(markov_matrix, scale_width, scale_width);
-
-  //  for (uint8_t note = 0; note < 128; note++) {
-  //    // reset notes
-  //    midiWrite(0x80 | seq1_midi_channel, note, 0);
-  //    // reset pitch bend
-  //    midiWrite(0xE0 | seq1_midi_channel, 0, 0);
-  //
-  //    midiWrite(0x80 | seq2_midi_channel, note, 0);
-  //    midiWrite(0xE0 | seq2_midi_channel, 0, 0);
-  //  }
 
 
   //////////////////////////////////////////
   // Initialize sequencer state variables //
   //////////////////////////////////////////
 
-  initialize_step_variables(eucl1_sequence_alternates, eucl1_sequence_direction, eucl1_sequence_step, eucl1_previous_sequence_step);
-  initialize_step_variables(eucl2_sequence_alternates, eucl2_sequence_direction, eucl2_sequence_step, eucl2_previous_sequence_step);
+  initialize_step_variables(eucl_sequence_alternates, eucl_sequence_direction, eucl_sequence_step, eucl_previous_sequence_step);
 
-  copy_array_uint8(EMPTY_16EVENTS, eucl1_gate_events, 16);
-  copy_array_uint8(EMPTY_16EVENTS, eucl2_gate_events, 16);
+  copy_array_uint8(EMPTY_16EVENTS, eucl_gate_events, 16);
 
-  read_and_set_euclidean_sequence(circular_running_average(analogRead(SETEUCL2_PIN), circ_buffer_euclset2_reads, curr_euclset2_buffer_idx, RUNNING_AVERAGE_LENGTH),
-                                  circular_running_average(analogRead(SETEUCL2SHADOW_PIN), circ_buffer_shadow2_reads, curr_shadow2_buffer_idx, RUNNING_AVERAGE_LENGTH),
-                                  current_nb_eucl2_events,
-                                  current_eucl2_shadow_steps,
-                                  eucl2_steps_per_bar, eucl2_gate_events, FILLED_HIGHO, 0);
-  read_and_set_euclidean_sequence(circular_running_average(analogRead(SETEUCL1_PIN), circ_buffer_euclset1_reads, curr_euclset1_buffer_idx, RUNNING_AVERAGE_LENGTH),
-                                  circular_running_average(analogRead(SETEUCL1SHADOW_PIN), circ_buffer_shadow1_reads, curr_shadow1_buffer_idx, RUNNING_AVERAGE_LENGTH),
-                                  current_nb_eucl1_events,
-                                  current_eucl1_shadow_steps,
-                                  eucl1_steps_per_bar, eucl1_gate_events, FILLED_LOWO, 1);
-
+  read_and_set_euclidean_sequence(circular_running_average(analogRead(SETEUCL_PIN), circ_buffer_euclset_reads, curr_euclset_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  circular_running_average(analogRead(SETEUCLSHADOW_PIN), circ_buffer_shadow_reads, curr_shadow_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  circular_running_average(analogRead(SETROTATION_PIN), circ_buffer_sequence_rotation_reads, curr_sequence_rotation_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  circular_running_average(analogRead(SETSCALE_PIN), circ_buffer_scale_reads, curr_scale_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  current_nb_eucl_events,
+                                  current_eucl_shadow_steps,
+                                  current_sequence_rotation,
+                                  current_scale,
+                                  eucl_steps_per_bar, eucl_gate_events, FILLED_LOWO, 1);
 }
 
 
@@ -216,68 +201,42 @@ void setup() {
 ///////////////////////////////////
 
 void loop() {
-  static bool eucl1_first_sequence_step = true;
-  static bool eucl2_first_sequence_step = true;
+  static bool eucl_first_sequence_step = true;
 
   /////////////////////////////////////
   // READ AND SET EUCLIDEAN SEQUENCE //
   /////////////////////////////////////
-  read_and_set_euclidean_sequence(circular_running_average(analogRead(SETEUCL2_PIN), circ_buffer_euclset2_reads, curr_euclset2_buffer_idx, RUNNING_AVERAGE_LENGTH),
-                                  circular_running_average(analogRead(SETEUCL2SHADOW_PIN), circ_buffer_shadow2_reads, curr_shadow2_buffer_idx, RUNNING_AVERAGE_LENGTH),
-                                  current_nb_eucl2_events,
-                                  current_eucl2_shadow_steps,
-                                  eucl2_steps_per_bar, eucl2_gate_events, FILLED_HIGHO, 0);
-  read_and_set_euclidean_sequence(circular_running_average(analogRead(SETEUCL1_PIN), circ_buffer_euclset1_reads, curr_euclset1_buffer_idx, RUNNING_AVERAGE_LENGTH),
-                                  circular_running_average(analogRead(SETEUCL1SHADOW_PIN), circ_buffer_shadow1_reads, curr_shadow1_buffer_idx, RUNNING_AVERAGE_LENGTH),
-                                  current_nb_eucl1_events,
-                                  current_eucl1_shadow_steps,
-                                  eucl1_steps_per_bar, eucl1_gate_events, FILLED_LOWO, 1);
+
+  read_and_set_euclidean_sequence(circular_running_average(analogRead(SETEUCL_PIN), circ_buffer_euclset_reads, curr_euclset_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  circular_running_average(analogRead(SETEUCLSHADOW_PIN), circ_buffer_shadow_reads, curr_shadow_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  circular_running_average(analogRead(SETROTATION_PIN), circ_buffer_sequence_rotation_reads, curr_sequence_rotation_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  circular_running_average(analogRead(SETSCALE_PIN), circ_buffer_scale_reads, curr_scale_buffer_idx, RUNNING_AVERAGE_LENGTH),
+                                  current_nb_eucl_events,
+                                  current_eucl_shadow_steps,
+                                  current_sequence_rotation,
+                                  current_scale,
+                                  eucl_steps_per_bar, eucl_gate_events, FILLED_LOWO, 1);
 
   /////////////////
   // GATE EVENTS //
   /////////////////
-  conditional_play_note(CVOUT1_PIN, GATE1_PIN,
-                        current_midi_note_seq1,
-                        seq1_midi_channel,
-                        semitone_cvs_1,
-                        eucl1_advance,
-                        eucl1_first_sequence_step,
-                        eucl1_sequence_step,
-                        eucl1_previous_sequence_step,
-                        eucl1_sequence_alternates,
-                        eucl1_sequence_direction,
-                        // eucl1_millis_per_step,
-                        eucl1_gate_events,
+  conditional_play_note(CVOUT_PIN, GATE_PIN,
+                        eucl_advance,
+                        eucl_first_sequence_step,
+                        eucl_sequence_step,
+                        eucl_previous_sequence_step,
+                        eucl_sequence_alternates,
+                        eucl_sequence_direction,
+                        eucl_gate_events,
                         reset_gate1,
-                        // last_gate1_millis,
                         FILLED_LOWO,
                         FILLED_HIGHO_UNDERBAR,
                         UNDERBAR,
                         EMPTY_CHAR,
                         1);
 
-  conditional_play_note(CVOUT2_PIN, GATE2_PIN,
-                        current_midi_note_seq2,
-                        seq2_midi_channel,
-                        semitone_cvs_2,
-                        eucl2_advance,
-                        eucl2_first_sequence_step,
-                        eucl2_sequence_step,
-                        eucl2_previous_sequence_step,
-                        eucl2_sequence_alternates,
-                        eucl2_sequence_direction,
-                        // eucl2_millis_per_step,
-                        eucl2_gate_events,
-                        reset_gate2,
-                        // last_gate2_millis,
-                        FILLED_HIGHO,
-                        FILLED_LOWO_OVERBAR,
-                        OVERBAR,
-                        EMPTY_CHAR,
-                        0);
 
-  conditional_reset_gate(GATE1_PIN, reset_gate1, current_midi_note_seq1, seq1_midi_channel);
-  conditional_reset_gate(GATE2_PIN, reset_gate2, current_midi_note_seq2, seq2_midi_channel);
+  conditional_reset_gate(GATE_PIN, reset_gate1);
 }
 
 
@@ -285,9 +244,7 @@ void loop() {
 
 void conditional_play_note(
   uint8_t cv_pin, uint8_t gate_pin,
-  uint8_t &current_midi_note,
-  uint8_t midi_channel,
-  uint8_t *semitone_cvs,
+  //  uint8_t *semitone_cvs,
   volatile bool &advance,
   bool &first_sequence_step,
   int8_t &eucl_sequence_step,
@@ -321,7 +278,11 @@ void conditional_play_note(
 
       current_semitone = draw_semitone_from_markov_matrix(markov_matrix, current_semitone, scale_width);
 
-      analogWrite(cv_pin, semitone_cvs[current_semitone]);
+
+      MCP.setValue(semitone_cvs_dac[current_semitone]);
+      //      Serial.println(semitone_cvs_dac[current_semitone]);
+      //      Serial.println(MCP.getValue());
+      //      analogWrite(cv_pin, semitone_cvs[current_semitone]);
       digitalWrite(gate_pin, HIGH);
 
       //      current_midi_note = midi_root_note + current_semitone;
@@ -401,7 +362,7 @@ void on_off_step_display(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////
-void conditional_reset_gate(uint8_t gate_pin, volatile bool &reset_gate, uint8_t current_midi_note, uint8_t midi_channel) {
+void conditional_reset_gate(uint8_t gate_pin, volatile bool &reset_gate) {
   if (reset_gate) {
     reset_gate = false;
     digitalWrite(gate_pin, LOW);
@@ -410,6 +371,74 @@ void conditional_reset_gate(uint8_t gate_pin, volatile bool &reset_gate, uint8_t
   }
 }
 
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+void read_and_set_euclidean_sequence(uint16_t new_euclset_read, uint16_t new_shadow_read, uint16_t new_sequence_rotation_read, uint16_t new_scale_read, uint8_t &nb_eucl_events, uint8_t &eucl_shadow_steps, int8_t &sequence_rotation, uint8_t &scale, uint8_t steps_per_bar, uint8_t *gate_events, char step_char, uint8_t column) {
+  uint8_t new_nbevents, new_shadow_steps;
+  int8_t new_sequence_rotation;
+  uint8_t new_scale;
+  char scale_string[16];
+  
+  uint8_t event_location;
+
+  uint16_t in_max = 1023, out_max = 16;
+
+  
+
+  new_nbevents = map(new_euclset_read, 0, in_max + 1 , 0, out_max + 1);
+
+  new_shadow_steps = map(new_shadow_read, 0, in_max + 1, 0, out_max + 1);
+
+  new_sequence_rotation = map(new_sequence_rotation_read, 0, in_max + 1, -16, 16 + 1);
+
+  new_scale = map(new_scale_read, 0, in_max + 1, 0, NUM_SCALES);
+
+  if ((new_nbevents != nb_eucl_events) ||
+      (new_shadow_steps != eucl_shadow_steps) ||
+      (new_sequence_rotation != sequence_rotation) ||
+      (new_scale != scale)) {
+
+    copy_array_uint8(EMPTY_16EVENTS, gate_events, 16);
+
+    nb_eucl_events = new_nbevents;
+    eucl_shadow_steps = new_shadow_steps;
+    sequence_rotation = new_sequence_rotation;
+    scale = new_scale;
+
+    lcd.setCursor(0, 0);
+    lcd.print(EMPTY_LINE);
+
+    lcd.setCursor(0, 0);
+    strcpy_P(scale_string, (char *)pgm_read_word(&(short_scale_names[scale])));
+    lcd.print(scale_string);
+
+    lcd.setCursor(9, 0);
+    lcd.print(notes[root_note]);
+
+    lcd.setCursor(12, 0);
+    lcd.print("r");
+    lcd.print(sequence_rotation);
+
+    lcd.setCursor(0, column);
+    lcd.print(EMPTY_LINE);
+
+
+    for (uint8_t k = 0; k < nb_eucl_events; k++) {
+      event_location = int(k * (16 + eucl_shadow_steps) * 1.0 / nb_eucl_events);
+
+      if (event_location < 16) {
+        event_location = mod(event_location + sequence_rotation, 16);
+
+        gate_events[event_location] = HIGH;
+
+        lcd.setCursor(event_location, column);
+        lcd.write(step_char);
+      }
+    }
+
+
+  }
+}
 
 
 /////////////////////////////////
@@ -428,43 +457,6 @@ uint16_t circular_running_average(uint16_t new_read, uint16_t *circ_buffer, uint
   average = (uint16_t)(int(total / buffer_length));
 
   return average;
-}
-
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-void read_and_set_euclidean_sequence(uint16_t new_euclset_read, uint16_t new_shadow_read, uint8_t &nb_eucl_events, uint8_t &eucl_shadow_steps, uint8_t steps_per_bar, uint8_t *gate_events, char step_char, uint8_t column) {
-  uint8_t new_nbevents, new_shadow_steps;
-  uint16_t euclset_read, shadow_read;
-  uint8_t event_location;
-
-  uint16_t in_max = 1023, out_max = 16;
-  uint16_t fine_bin;
-
-  new_nbevents = map(new_euclset_read, 0, in_max + 1 , 0, out_max + 1);
-
-  new_shadow_steps = map(new_shadow_read, 0, in_max + 1, 0, out_max + 1);
-
-
-  if ((new_nbevents != nb_eucl_events) or (new_shadow_steps != eucl_shadow_steps)) {
-    copy_array_uint8(EMPTY_16EVENTS, gate_events, 16);
-
-    nb_eucl_events = new_nbevents;
-    eucl_shadow_steps = new_shadow_steps;
-
-    lcd.setCursor(0, column);
-    lcd.print(EMPTY_LINE);
-
-    for (uint8_t k = 0; k < nb_eucl_events; k++) {
-      event_location = int(k * (16 + eucl_shadow_steps) * 1.0 / nb_eucl_events);
-
-      if (event_location < 16) {
-        gate_events[event_location] = HIGH;
-
-        lcd.setCursor(event_location, column);
-        lcd.write(step_char);
-      }
-    }
-  }
 }
 
 
@@ -647,23 +639,10 @@ uint8_t draw_semitone_from_markov_matrix(float * markov_matrix, uint8_t initial_
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-void input_and_play_semitone(uint8_t seq) {
-  if (seq == 0) {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Tuning seq 1 & 2");
-    lcd.setCursor(0, 1);
-    lcd.print("Tuning seq 1 & 2");
-  } else if (seq == 1) {
-    lcd.clear();
-    lcd.setCursor(0, 1);
-    lcd.print("Tuning seq 1");
-  } else if (tune_seq == 2) {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Tuning seq 2");
-  }
-
+void input_and_play_semitone() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Tuning mode");
 
   Serial.println("");
   for (;;) {
@@ -681,30 +660,8 @@ void input_and_play_semitone(uint8_t seq) {
     }
     inData.trim(); // Eliminate \n, \r, blank and other not “printable”
     Serial.println();
-    if (seq == 0) {
+    MCP.setValue(inData.toInt());
 
-      analogWrite(CVOUT1_PIN, inData.toInt());
-      analogWrite(CVOUT2_PIN, inData.toInt());
-      digitalWrite(GATE1_PIN, HIGH);
-      digitalWrite(GATE2_PIN, HIGH);
-      delay(100);
-      digitalWrite(GATE1_PIN, LOW);
-      digitalWrite(GATE2_PIN, LOW);
-
-    } else if (seq == 1) {
-
-      analogWrite(CVOUT1_PIN, inData.toInt());
-      digitalWrite(GATE1_PIN, HIGH);
-      delay(100);
-      digitalWrite(GATE1_PIN, LOW);
-
-    } else if (seq == 2) {
-
-      analogWrite(CVOUT2_PIN, inData.toInt());
-      digitalWrite(GATE2_PIN, HIGH);
-      delay(100);
-      digitalWrite(GATE2_PIN, LOW);
-    }
   }
 
 }
@@ -762,6 +719,11 @@ void copy_array_bool(bool * src, bool * dst, uint16_t len) {
   }
 }
 
+////////////////////////////////////////
+
+int mod(int x, int m) {
+  return (x % m + m) % m;
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 void tictoc() {
@@ -770,25 +732,12 @@ void tictoc() {
   tic_toc = !tic_toc;
 
   if (tic_toc) {
-    eucl1_advance = true;
-    eucl2_advance = true;
+    eucl_advance = true;
 
     reset_gate1 = false;
-    reset_gate2 = false;
 
   } else {
-
-    //    eucl1_advance = false;
-    //    eucl1_advance = false;
-
     reset_gate1 = true;
-    reset_gate2 = true;
   }
 
-}
-
-void midiWrite(uint8_t cmd, uint8_t pitch, uint8_t velocity) {
-  Serial.write(cmd);
-  Serial.write(pitch);
-  Serial.write(velocity);
 }
