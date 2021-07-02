@@ -1,4 +1,4 @@
-# Alician Chorea
+# Alician Choreia
 
 Euclidean sequencer with in-scale Markov chain.
 
