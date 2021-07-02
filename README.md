@@ -1,4 +1,4 @@
-# Euclid and Markov at the Pub
+# Alician Chorea
 
 Euclidean sequencer with in-scale Markov chain.
 
