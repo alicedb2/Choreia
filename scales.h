@@ -12,9 +12,6 @@
 //                          119
 //                         };
 
-// Custom scales
-#define                 CUSTOM_1 0b1011010010001011
-
 // Main scales                        
 #define                CHROMATIC 0b1111111111111111
 #define                    MAJOR 0b0101101010110101
@@ -46,7 +43,7 @@
 #define        HARMONIC_PHRYGIAN 0b1011100110101011
 #define           PHRYGIAN_MAJOR 0b1101101010101101
 #define                LYDIAN_B3 0b1101101011001101
-#define            MAJOR_LOCRIAN 0b0111011101010111
+#define            MAJOR_LOCRIAN 0b0101010101110101
 #define            MINOR_LOCRIAN 0b1101010101101101
 #define            SUPER_LOCRIAN 0b1011010101011011
 
@@ -121,7 +118,6 @@
 #define           HARMONIC_MAJOR 0b0101100110110101
 #define    DOUBLE_HARMONIC_MAJOR 0b0011100110110011
 #define         NEAPOLITAN_MAJOR 0b0011101010110011
-#define           MAJOR_LOCARIAN 0b0101010101110101
 #define              BEBOP_MAJOR 0b0101101110110101
 #define        HEXATONIC_1_MAJOR 0b0101101010010101
 #define        HEXATONIC_2_MAJOR 0b0101001010110101
@@ -134,10 +130,167 @@
 #define              MINOR_MAJOR 0b1101101010101101
 #define    DOUBLE_HARMONIC_MINOR 0b1101100111001101
 #define        NEAPOLITAIN_MINOR 0b1011100110101011
-#define           MINOR_LOCARIAN 0b1101010101101101
+#define            MINOR_LOCRIAN 0b1101010101101101
 #define              BEBOP_MINOR 0b1101110110101101
 #define        HEXATONIC_1_MINOR 0b1101010110001101
 #define        HEXATONIC_2_MINOR 0b1101000110101101
 #define       PENTATONIC_1_MINOR 0b1101000110001101
 #define       PENTATONIC_2_MINOR 0b1001010010101001
 #define       PENTATONIC_3_MINOR 0b1001010110001001
+
+
+// We only got 8 characters
+const char Chromatic_string[] PROGMEM = "Chromatc";
+const char Major_string[] PROGMEM = "Major";
+const char Minor_string[] PROGMEM = "Minor";
+const char Harm_Min_string[] PROGMEM = "HarmoMin";
+const char Maj_Penta_string[] PROGMEM = "MajPenta";
+const char Min_Penta_string[] PROGMEM = "MinPenta";
+const char Blues_string[] PROGMEM = "Blues";
+const char Japanese_string[] PROGMEM = "Japanese";
+const char Freygish_string[] PROGMEM = "Freygish";
+const char Romani_string[] PROGMEM = "Romani";
+const char Arabic_string[] PROGMEM = "Arabic";
+const char Altered_string[] PROGMEM = "Altered";
+const char Whl_Tone_string[] PROGMEM = "WhlTone";
+const char H_W_Dim_string[] PROGMEM = "HWDimin";
+const char W_H_Dim_string[] PROGMEM = "WHDimin";
+
+const char Ionian_string[] PROGMEM = "Ionian";
+const char Dorian_string[] PROGMEM = "Dorian";
+const char Phrygian_string[] PROGMEM = "Phrygian";
+const char Lydian_string[] PROGMEM = "Lydian";
+const char Mixolydian_string[] PROGMEM = "Mixolydi";
+const char Aeolian_string[] PROGMEM = "Aeolian";
+const char Locrian_string[] PROGMEM = "Locrian";
+const char Ionian_b2_string[] PROGMEM = "Ionianb2";
+const char Dorian_b5_string[] PROGMEM = "Dorianb5";
+const char Harm_Phry_string[] PROGMEM = "HarmPhry";
+const char Phry_Maj_string[] PROGMEM = "PhrygMaj";
+const char Lydian_b3_string[] PROGMEM = "Lydianb3";
+const char Maj_Locr_string[] PROGMEM = "MajLocri";
+const char Min_Locr_string[] PROGMEM = "MinLocri";
+const char Super_Locr_string[] PROGMEM = "SuprLocr";
+
+const char Lydian_7b_string[] PROGMEM = "Lydian7b";
+const char Diminished_string[] PROGMEM = "Dmnished";
+const char Mix_b13_string[] PROGMEM = "Mixolb13";
+const char Mix_b9_b13_string[] PROGMEM = "Mixb9b13";
+const char Lyd_7b_b2_string[] PROGMEM = "Lydi7bb2";
+const char Bebop_string[] PROGMEM = "Bebop";
+const char Blues_Maj_string[] PROGMEM = "BluesMaj";
+const char Blues_Min_string[] PROGMEM = "BluesMin";
+const char Blues_Comb_string[] PROGMEM = "BluesCmb";
+const char Lydian_5_string[] PROGMEM = "Lydian#5";
+const char Jazz_Min_string[] PROGMEM = "JazzMin";
+const char Half_Dim_string[] PROGMEM = "HalfDim";
+const char Augmented_string[] PROGMEM = "Augmnted";
+
+const char Hungar_Min_string[] PROGMEM = "HungrMin";
+const char Hungar_Maj_string[] PROGMEM = "HungrMaj";
+const char Neapolitan_string[] PROGMEM = "Neapolit";
+const char Spanish_string[] PROGMEM = "Spanish";
+const char Greek_string[] PROGMEM = "Greek";
+const char Jewish_1_string[] PROGMEM = "Jewish1";
+const char Jewish_2_string[] PROGMEM = "Jewish2";
+const char Indian_1_string[] PROGMEM = "Indian1";
+const char Indian_2_string[] PROGMEM = "Indian2";
+const char Indian_3_string[] PROGMEM = "Indian3";
+const char Indian_4_string[] PROGMEM = "Indian4";
+const char Mid_East_1_string[] PROGMEM = "MidEast1";
+const char Mid_East_2_string[] PROGMEM = "MidEast2";
+const char Mid_East_3_string[] PROGMEM = "MidEast3";
+const char Mid_East_4_string[] PROGMEM = "MidEast4";
+
+const char Pent_I_string[] PROGMEM = "PentaI";
+const char Pent_II_string[] PROGMEM = "PentaII";
+const char Pent_III_string[] PROGMEM = "PentaIII";
+const char Pent_IV_string[] PROGMEM = "PentaIV";
+const char Pent_V_string[] PROGMEM = "PentaV";
+const char Hirajoshi_string[] PROGMEM = "Hirajosh";
+const char Insen_string[] PROGMEM = "Insen";
+const char KokinJoshi_string[] PROGMEM = "Koknjosh";
+const char Akebono_string[] PROGMEM = "Akebono";
+const char Ryukuan_string[] PROGMEM = "Ryukuan";
+const char Abhogi_string[] PROGMEM = "Abhogi";
+const char Bhupkali_string[] PROGMEM = "Bhupkali";
+const char Hindolam_string[] PROGMEM = "Hindolam";
+const char Bhupalam_string[] PROGMEM = "Bhupalam";
+const char Amritavars_string[] PROGMEM = "Amritava";
+
+const char Octatonic_string[] PROGMEM = "Octatonc";
+const char Acoustic_string[] PROGMEM = "Acoustic";
+const char Tritone_string[] PROGMEM = "Tritone";
+const char LeadingWhl_string[] PROGMEM = "LeadngWh";
+const char Enigmatic_string[] PROGMEM = "Enigmatc";
+const char Scriabin_string[] PROGMEM = "Scriabin";
+const char Tcherepnin_string[] PROGMEM = "Tcherepn";
+const char Messiaen_1_string[] PROGMEM = "Messiae1";
+const char Messiaen_2_string[] PROGMEM = "Messiae2";
+const char Messiaen_3_string[] PROGMEM = "Messiae3";
+const char Messiaen_4_string[] PROGMEM = "Messiae4";
+const char Messiaen_5_string[] PROGMEM = "Messiae5";
+const char Messiaen_6_string[] PROGMEM = "Messiae6";
+const char Messiaen_7_string[] PROGMEM = "Messiae7";
+
+const char Nat_Maj_string[] PROGMEM = "NaturMaj";
+const char Maj_Min_string[] PROGMEM = "MajMin";
+const char Harm_Maj_string[] PROGMEM = "HarmoMaj";
+const char DblHarmMaj_string[] PROGMEM = "DblHrmMj";
+const char NaepolMaj_string[] PROGMEM = "NaeplMaj";
+const char Major_Loc_string[] PROGMEM = "MajorLoc";
+const char BluesMaj_string[] PROGMEM = "BluesMaj";
+const char Bebop_Maj_string[] PROGMEM = "BebopMaj";
+const char Hexa_1_Maj_string[] PROGMEM = "Hexa1Maj";
+const char Hexa_2_Maj_string[] PROGMEM = "Hexa2Maj";
+const char Penta1_Maj_string[] PROGMEM = "Penta1Mj";
+const char Penta2_Maj_string[] PROGMEM = "Penta2Mj";
+const char Penta3_Maj_string[] PROGMEM = "Penta3Mj";
+
+const char Nat_Min_string[] PROGMEM = "NaturMin";
+const char Min_Maj_string[] PROGMEM = "MinMaj";
+const char DblHarmMin_string[] PROGMEM = "DblHrmMn";
+const char NeapolMin_string[] PROGMEM = "NeapolMn";
+const char Minor_Loc_string[] PROGMEM = "MinorLoc";
+const char Bebop_Min_string[] PROGMEM = "BebopMin";
+const char Hexa_1_Min_string[] PROGMEM = "Hexa1Min";
+const char Hexa_2_Min_string[] PROGMEM = "Hexa2Min";
+const char Penta1_Min_string[] PROGMEM = "Penta1Mn";
+const char Penta2_Min_string[] PROGMEM = "Penta2Mn";
+const char Penta3_Min_string[] PROGMEM = "Penta3Mn";
+
+#define NUM_SCALES 120
+
+const char *const short_scale_names[NUM_SCALES] PROGMEM = {
+  Chromatic_string, Major_string, Minor_string, Harm_Min_string, Maj_Penta_string,
+  Min_Penta_string, Blues_string, Japanese_string, Freygish_string, Romani_string,
+  Arabic_string, Altered_string, Whl_Tone_string, H_W_Dim_string, W_H_Dim_string,
+
+  Ionian_string, Dorian_string, Phrygian_string, Lydian_string, Mixolydian_string,
+  Aeolian_string, Locrian_string, Ionian_b2_string, Dorian_b5_string, Harm_Phry_string,
+  Phry_Maj_string, Lydian_b3_string, Maj_Locr_string, Min_Locr_string, Super_Locr_string,
+
+  Lydian_7b_string, Altered_string, Diminished_string, Mix_b13_string, Mix_b9_b13_string,
+  Lyd_7b_b2_string, Bebop_string, Whl_Tone_string, Blues_Maj_string, Blues_Min_string,
+  Blues_Comb_string, Lydian_5_string, Jazz_Min_string, Half_Dim_string, Augmented_string,
+
+  Hungar_Min_string, Hungar_Maj_string, Neapolitan_string, Spanish_string, Greek_string,
+  Jewish_1_string, Jewish_2_string, Indian_1_string, Indian_2_string, Indian_3_string,
+  Indian_4_string, Mid_East_1_string, Mid_East_2_string, Mid_East_3_string, Mid_East_4_string,
+
+  Pent_I_string, Pent_II_string, Pent_III_string, Pent_IV_string, Pent_V_string,
+  Hirajoshi_string, Insen_string, KokinJoshi_string, Akebono_string, Ryukuan_string,
+  Abhogi_string, Bhupkali_string, Hindolam_string, Bhupalam_string, Amritavars_string,
+
+  Octatonic_string, Acoustic_string, Augmented_string, Tritone_string, LeadingWhl_string,
+  Enigmatic_string, Scriabin_string, Tcherepnin_string, Messiaen_1_string, Messiaen_2_string,
+  Messiaen_3_string, Messiaen_4_string, Messiaen_5_string, Messiaen_6_string, Messiaen_7_string,
+
+  Nat_Maj_string, Lydian_string, Mixolydian_string, Maj_Min_string, Harm_Maj_string,
+  DblHarmMaj_string, NaepolMaj_string, Major_Loc_string, BluesMaj_string, Bebop_Maj_string,
+  Hexa_1_Maj_string, Hexa_2_Maj_string, Penta1_Maj_string, Penta2_Maj_string, Penta3_Maj_string,
+
+  Nat_Min_string, Dorian_string, Phrygian_string, Min_Maj_string, Harm_Min_string,
+  DblHarmMin_string, NeapolMin_string, Minor_Loc_string, Blues_Min_string, Bebop_Min_string,
+  Hexa_1_Min_string, Hexa_2_Min_string, Penta1_Min_string, Penta2_Min_string, Penta3_Min_string
+};
