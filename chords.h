@@ -2,6 +2,8 @@
 
 ////// Chords are relative to the root note as well
 
+#define         NO_CHORD 0b1111111111111111
+
 // Major chords sound happy and simple.
 #define          MAJOR_CHORD 0b000010010001
 
