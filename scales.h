@@ -183,11 +183,11 @@ const char Maj_Locr_string[] PROGMEM = "MajLocri";
 const char Min_Locr_string[] PROGMEM = "MinLocri";
 const char Super_Locr_string[] PROGMEM = "SuprLocr";
 
-const char Lydian_7b_string[] PROGMEM = "Lydian7b";
+const char Lydian_7b_string[] PROGMEM = "Lydianb7";
 const char Diminished_string[] PROGMEM = "Dmnished";
-const char Mix_b13_string[] PROGMEM = "Mixolb13";
-const char Mix_b9_b13_string[] PROGMEM = "Mixb9b13";
-const char Lyd_7b_b2_string[] PROGMEM = "Lydi7bb2";
+const char Mix_b13_string[] PROGMEM = "MixolB13";
+const char Mix_b9_b13_string[] PROGMEM = "Mixb9B13";
+const char Lyd_7b_b2_string[] PROGMEM = "Lydib7B2";
 const char Bebop_string[] PROGMEM = "Bebop   ";
 const char Blues_Maj_string[] PROGMEM = "BluesMaj";
 const char Blues_Min_string[] PROGMEM = "BluesMin";
