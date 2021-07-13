@@ -12,7 +12,7 @@
 
 #define SWITCH_PIN 9
 #define ROOT_PIN A1
-#define CHORD_PIN A2
+#define GATEPROB_PIN A2
 
 // On the ADC
 #define SCALE_PIN 1
@@ -77,7 +77,7 @@ const uint16_t semitone_cvs_dac[57] = {
   3812,
   3884,
   3954,
-  4030  // A6
+  4030  // G#6
 };
 
 
