@@ -11,14 +11,26 @@
 #define CLOCKIN_PIN 3
 
 #define SWITCH_PIN 9
-#define ROOT_PIN A1
-#define GATEPROB_PIN A2
 
 // On the ADC
 #define SCALE_PIN 1
+#define FIRSTNEIGHBOR_PIN 1
+
 #define SHADOW_PIN 2
+#define REPEATNOTE_PIN 2
+
 #define ROTATION_PIN 0
+#define SCALEWIDTH_PIN 0
+
 #define EUCL_PIN 3
+#define DISPERSION_PIN 3
+
+// On analog pins
+#define ROOT_PIN A1
+#define JUMPTOROOT_PIN A1
+
+#define GATEPROB_PIN A2
+#define SECONDNEIGHBOR_PIN A2
 
 const uint16_t semitone_cvs_dac[57] = {
   6, // C2
@@ -116,7 +128,11 @@ const byte Six_bars[8] =
 #define FILLED_HIGHO_UNDERBAR char(1)
 #define UNDERBAR char(2)
 
-
+#define ZEROBARS char(32)
+#define TWOBARS char(3)
+#define FOURBARS char(4)
+#define SIXBARS char(5)
+#define EIGHTBARS char(255)
 
 const char key_C[3] = "C ";
 const char key_Csharp[3] = "C#";
