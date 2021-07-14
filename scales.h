@@ -23,7 +23,7 @@
 #define                 JAPANESE 0b000110001101
 #define                 FREYGISH 0b010110110011
 #define                   ROMANI 0b100111001101
-#define                 SCOTTISH 0b001010100101 //++
+#define                 SCOTTISH 0b001010100101 //++ but also == PENTATONIC_IV
 #define                   ARABIC 0b100110110011
 #define                  ALTERED 0b010101011011
 #define               WHOLE_TONE 0b010101010101
@@ -272,7 +272,7 @@ const char Penta3_Min_string[] PROGMEM = "Penta3Mn";
 
 #define NUM_SCALES 111
 
-const uint16_t scales[NUM_SCALES] = {
+const uint16_t scales[NUM_SCALES] PROGMEM = {
   CHROMATIC,  // 0
   MAJOR,  // 1
   MINOR,  // 2
