@@ -10,10 +10,18 @@
 MCP4725 MCP(0x60);
 ADS1115 ADS(0x48);
 
+bool tuning_mode = false;
+
 const uint8_t rs = 12, en = 11, d4 = 4, d5 = 5, d6 = 7, d7 = 8;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 u16 markov_seed;
+
+xorshift32_state markov_rng_state;
+u32 markov_rng_seed;
+
+xorshift32_state draw_rng_state;
+u32 draw_rng_seed;
 
 float *random_uniform_matrix;
 float *markov_matrix;
@@ -38,10 +46,10 @@ float switched_PARAM_jump_to_second_neighbors = 1.0;
 
 
 
-long unsigned int last_markovian_display_refresh;
+char rad_viz_line1[17] = EMPTY_LINE;
+char rad_viz_line2[17] = EMPTY_LINE;
 
 u8 current_note = 0;
-u8 current_semitone = 0;
 
 bool sequencer_alternates = true;
 int8_t sequencer_direction = 1;
@@ -73,8 +81,13 @@ bool switch_state, last_switch_state;
 long unsigned int last_switch_change;
 bool fast_double_switch_change;
 
+long unsigned int tic;
+
 void setup() {
   ////////////////////////
+
+  analogReference(EXTERNAL);
+
   pinMode(GATE_PIN, OUTPUT);
   pinMode(CLOCKIN_PIN, INPUT);
   pinMode(GATEPROB_PIN, INPUT);
@@ -106,10 +119,17 @@ void setup() {
 
   lcd.clear();
 
+  if (tuning_mode) {
+    input_and_play_semitone();
+  }
 
   //////////////////////
-  markov_seed = TrueRandom.random(0, 65536);
-  randomSeed(markov_seed);
+
+  markov_rng_seed = TrueRandom.random(0, 65536) * TrueRandom.random(0, 65536);
+  Serial.println(markov_rng_seed);
+  draw_rng_seed = TrueRandom.random(0, 65536) * TrueRandom.random(0, 65536);
+  draw_rng_state = {draw_rng_seed};
+  Serial.println(draw_rng_seed);
 
   switch_state = digitalRead(SWITCH_PIN);
   last_switch_state = switch_state;
@@ -131,7 +151,6 @@ void setup() {
     conditional_set_and_display_gate_probability(analogRead(GATEPROB_PIN));
 
   } else {  // Markovian last
-
     conditional_set_and_display_scale(ADS.readADC(SCALE_PIN));
     conditional_set_and_display_root(analogRead(ROOT_PIN));
     conditional_set_and_display_euclidean_sequence(ADS.readADC(EUCL_PIN), ADS.readADC(SHADOW_PIN), ADS.readADC(ROTATION_PIN));
@@ -143,43 +162,37 @@ void setup() {
     conditional_set_markovian_parameters(ADS.readADC(DISPERSION_PIN), ADS.readADC(REPEATNOTE_PIN), ADS.readADC(SCALEWIDTH_PIN), ADS.readADC(FIRSTNEIGHBOR_PIN), analogRead(JUMPTOROOT_PIN), analogRead(SECONDNEIGHBOR_PIN));
   }
 
-  last_markovian_display_refresh = millis();
   startup = false;
   GLOBAL_refresh_display = false;
 }
 
 
 void loop() {
-  //    Serial.print(digitalRead(CLOCKIN_PIN));
-  //    Serial.print("  ");
-  //    Serial.print(ADS.readADC(EUCL_PIN));
-  //    Serial.print("  ");
-  //    Serial.print(ADS.readADC(ROTATION_PIN));
-  //    Serial.print("  ");
-  //    Serial.print(ADS.readADC(SCALE_PIN));
-  //    Serial.print("  ");
-  //    Serial.print(ADS.readADC(SHADOW_PIN));
-  //    Serial.print("  ");
-  //    Serial.print(analogRead(ROOT_PIN));
-  //    Serial.print("  ");
-  //    Serial.println(analogRead(GATEPROB_PIN));
-
+  //      Serial.print(digitalRead(CLOCKIN_PIN));
+  //  Serial.print("  ");
+  //  Serial.print(ADS.readADC(EUCL_PIN));
+  //  Serial.print("  ");
+  //  Serial.print(ADS.readADC(ROTATION_PIN));
+  //  Serial.print("  ");
+  //  Serial.print(ADS.readADC(SCALE_PIN));
+  //  Serial.print("  ");
+  //  Serial.print(ADS.readADC(SHADOW_PIN));
+  //  Serial.print("  ");
+  //  Serial.print(analogRead(ROOT_PIN));
+  //  Serial.print("  ");
+  //  Serial.println(analogRead(GATEPROB_PIN));
+  Serial.println(ADS.readADC(EUCL_PIN));
   if (advance_sequencer) {
-    bool flip_a_coin = TrueRandom.random(0, 101) <= PARAM_gate_probability;
-
+    bool flip_a_coin = (1.0 * xorshift32(&draw_rng_state)) / MAXU32 <= PARAM_gate_probability / 100.0;
     if (gate_events[sequencer_step] && flip_a_coin) {
-      current_note = draw_note_from_markov_seed(current_note);
-      current_semitone = semitone_vector_in_scale[current_note];
-      print_u8_vector(semitone_vector_in_scale, PARAM_scale_width);
-      //      Serial.print(current_note);
-      //      Serial.print("  ");
-      //      Serial.println(current_semitone);
-      MCP.setValue(semitone_cvs_dac[current_semitone]);
-      digitalWrite(GATE_PIN, HIGH);
+
+      draw_and_play_note_from_markov_seed();
     }
 
 
-    display_step_indicator();
+    if (switch_state) {
+      display_step_indicator();
+    }
     update_sequencer_variables(); //must be after display
     advance_sequencer = false;
   }
@@ -222,30 +235,27 @@ void loop() {
   }
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  if (switch_state && last_switch_state && !fast_double_switch_change) {
+  if (switch_state) {
 
     conditional_set_and_display_scale(ADS.readADC(SCALE_PIN));
     conditional_set_and_display_root(analogRead(ROOT_PIN));
     conditional_set_and_display_euclidean_sequence(ADS.readADC(EUCL_PIN), ADS.readADC(SHADOW_PIN), ADS.readADC(ROTATION_PIN));
     conditional_set_and_display_gate_probability(analogRead(GATEPROB_PIN));
-    
-  } else if (!switch_state && !last_switch_state && !fast_double_switch_change) {
+
+  } else if (!switch_state) {
 
     conditional_set_markovian_parameters(ADS.readADC(DISPERSION_PIN), ADS.readADC(REPEATNOTE_PIN), ADS.readADC(SCALEWIDTH_PIN), ADS.readADC(FIRSTNEIGHBOR_PIN), analogRead(JUMPTOROOT_PIN), analogRead(SECONDNEIGHBOR_PIN));
 
-  } else if (fast_double_switch_change) {
-
-    markov_seed = TrueRandom.random(0, 65536);
-    randomSeed(markov_seed);
-    fast_double_switch_change = false;
-
   }
-  
+
+  if (fast_double_switch_change) {
+    markov_rng_seed = TrueRandom.random(0, 65536) * TrueRandom.random(0, 65536);
+    fast_double_switch_change = false;
+  }
+
   GLOBAL_refresh_display = false;
 
 }
-
-
 
 void display_step_indicator () {
 
@@ -387,11 +397,8 @@ void conditional_set_and_display_euclidean_sequence(u16 eucl_pin_read, u16 shado
   }
 
 
-  if (update_me || GLOBAL_refresh_display) {
-    Serial.print("update rot/seq ");
-    Serial.print(update_me);
-    Serial.println(GLOBAL_refresh_display);
 
+  if (update_me || GLOBAL_refresh_display) {
     lcd.setCursor(14, 0);
     lcd.print("  ");
 
@@ -428,10 +435,8 @@ void conditional_set_and_display_gate_probability(u16 gateprob_pin_reading) {
     update_me = true;
   }
 
+
   if (update_me || GLOBAL_refresh_display) {
-    Serial.print("update gateprob");
-    Serial.print(update_me);
-    Serial.println(GLOBAL_refresh_display);
 
     lcd.setCursor(11, 0);
     lcd.print("   ");
@@ -465,10 +470,9 @@ void conditional_set_and_display_scale(u16 scale_pin_read) {
     //    print_u8_vector(semitone_vector_in_scale, PARAM_scale_width);
   }
 
+
   if (update_me || GLOBAL_refresh_display) {
-    Serial.println("update scale");
-    Serial.print(update_me);
-    Serial.println(GLOBAL_refresh_display);
+
     lcd.setCursor(0, 0);
     strcpy_P(scale_string, (char *)pgm_read_word(&(short_scale_names[PARAM_scale_idx])));
     lcd.print(scale_string);
@@ -485,15 +489,11 @@ void conditional_set_and_display_root(u16 root_pin_read) {
     PARAM_root = binned_read;
     switched_PARAM_root = binned_read;
     update_me = true;
-    Serial.println("regenerating");
     regenerate_semitone_vector_in_scale();
   }
 
   if (update_me || GLOBAL_refresh_display) {
-    Serial.print(update_me);
-    Serial.println(GLOBAL_refresh_display);
 
-    Serial.println("update root");
     lcd.setCursor(8, 0);
     lcd.print("   ");
 
@@ -573,20 +573,22 @@ void initialize_sequencer_variables() {
 // Let's make the altorightm O(PARAM_scale_width) in space
 // rather than generating a full markov matrix which
 // is O(PARAM_scale_width^2) in space and very restrictive.
-u8 draw_note_from_markov_seed(u8 initial_note) {
+void draw_and_play_note_from_markov_seed() {
   ///////// Regenerate markov column from the seed /////////
-  randomSeed(markov_seed);
 
-  float cumul_threshold = random(1, 101) / 100.0;
+  markov_rng_state = {markov_rng_seed};
 
   float *markov_column = (float *)malloc(sizeof(float[PARAM_scale_width]));
 
+  u8 initial_note = current_note;
+
   for (u16 i = 0; i < initial_note * PARAM_scale_width; i++) {
-    random(2);
+    xorshift32(&markov_rng_state);
   }
 
   for (u8 i = 0; i < PARAM_scale_width; i++) {
-    markov_column[i] = random(1, 101) / (3.141592 * PARAM_scale_dispersion);
+    markov_column[i] = (1.0 * xorshift32(&markov_rng_state)) / MAXU32;
+    markov_column[i] /= (3.141592 * PARAM_scale_dispersion);
     markov_column[i] /= 1.0 + pow(abs(i - initial_note) / PARAM_scale_dispersion, 2);
     markov_column[i] *= abs(i - initial_note) % 2 ? PARAM_jump_to_first_neighbors : 1.0;
     markov_column[i] *= abs(i - initial_note) % 3 == 2 ? PARAM_jump_to_second_neighbors : 1.0;
@@ -595,17 +597,36 @@ u8 draw_note_from_markov_seed(u8 initial_note) {
   markov_column[PARAM_root] *= PARAM_jump_to_root;
   markov_column[initial_note] *= PARAM_repeat_note;
 
-  //  print_float_vector(markov_column, PARAM_scale_width);
-  //  Serial.println();
-
   float column_total = 0.0;
+  float max_element = 0.0;
   for (u8 i = 0; i < PARAM_scale_width; i++) {
+    max_element = max(max_element, markov_column[i]);
     column_total += markov_column[i];
   }
 
+
+  float cumul_variate = (1.0 * xorshift32(&draw_rng_state)) / MAXU32;
+  float cumul = 0;
+
+  for (u8 i = 0; i < PARAM_scale_width; i++) {
+    cumul += markov_column[i] / column_total;
+    if (cumul >= cumul_variate || i == PARAM_scale_width - 1) {
+      current_note = i;
+      break;
+    }
+  }
+
+  //  current_note =
+  u8 semitone_to_play = semitone_vector_in_scale[current_note];
+  MCP.setValue(semitone_cvs_dac[semitone_to_play]);
+  digitalWrite(GATE_PIN, HIGH);
+
+
+  free(markov_column);
+
+
   ////////////////// TOTALLY RAD VISUALIZATION ///////////////////
-  if (millis() - last_markovian_display_refresh > 50 && !switch_state) {
-    last_markovian_display_refresh = millis();
+  if (!switch_state) {
 
     u8 binned_element;
     int8_t n;
@@ -615,90 +636,101 @@ u8 draw_note_from_markov_seed(u8 initial_note) {
       n = initial_note - 8 + cur;
 
       if (n < 0 || n > PARAM_scale_width - 1) {
-        lcd.setCursor(cur, 0);
-        lcd.write(ZEROBARS);
-        lcd.setCursor(cur, 1);
-        lcd.write(ZEROBARS);
+        //        lcd.setCursor(cur, 0);
+        //        lcd.write(ZEROBARS);
+        //        lcd.setCursor(cur, 1);
+        //        lcd.write(ZEROBARS);
+        rad_viz_line1[cur] = ZEROBARS;
+        rad_viz_line2[cur] = ZEROBARS;
+
       } else {
 
-        binned_element = constrain(int(markov_column[n] * PARAM_scale_width * (8 + 1) / column_total), 0, 8);
+        binned_element = constrain(int(markov_column[n] * (8 + 1) / max_element), 0, 8);
 
         switch (binned_element) {
           case 0:
-            lcd.setCursor(cur, 0);
-            lcd.write(ZEROBARS);
-            lcd.setCursor(cur, 1);
-            lcd.write(ZEROBARS);
+            //            lcd.setCursor(cur, 0);
+            //            lcd.write(ZEROBARS);
+            //            lcd.setCursor(cur, 1);
+            //            lcd.write(ZEROBARS);
+            rad_viz_line1[cur] = ZEROBARS;
+            rad_viz_line2[cur] = ZEROBARS;
             break;
           case 1:
-            lcd.setCursor(cur, 0);
-            lcd.write(ZEROBARS);
-            lcd.setCursor(cur, 1);
-            lcd.write(TWOBARS);
+            //            lcd.setCursor(cur, 0);
+            //            lcd.write(ZEROBARS);
+            //            lcd.setCursor(cur, 1);
+            //            lcd.write(TWOBARS);
+            rad_viz_line1[cur] = ZEROBARS;
+            rad_viz_line2[cur] = TWOBARS;
             break;
           case 2:
-            lcd.setCursor(cur, 0);
-            lcd.write(ZEROBARS);
-            lcd.setCursor(cur, 1);
-            lcd.write(FOURBARS);
+            //            lcd.setCursor(cur, 0);
+            //            lcd.write(ZEROBARS);
+            //            lcd.setCursor(cur, 1);
+            //            lcd.write(FOURBARS);
+            rad_viz_line1[cur] = ZEROBARS;
+            rad_viz_line2[cur] = FOURBARS;
             break;
           case 3:
-            lcd.setCursor(cur, 0);
-            lcd.write(ZEROBARS);
-            lcd.setCursor(cur, 1);
-            lcd.write(FOURBARS);
+            //            lcd.setCursor(cur, 0);
+            //            lcd.write(ZEROBARS);
+            //            lcd.setCursor(cur, 1);
+            //            lcd.write(SIXBARS);
+            rad_viz_line1[cur] = ZEROBARS;
+            rad_viz_line2[cur] = SIXBARS;
             break;
           case 4:
-            lcd.setCursor(cur, 0);
-            lcd.write(ZEROBARS);
-            lcd.setCursor(cur, 1);
-            lcd.write(EIGHTBARS);
+            //            lcd.setCursor(cur, 0);
+            //            lcd.write(ZEROBARS);
+            //            lcd.setCursor(cur, 1);
+            //            lcd.write(EIGHTBARS);
+            rad_viz_line1[cur] = ZEROBARS;
+            rad_viz_line2[cur] = EIGHTBARS;
             break;
           case 5:
-            lcd.setCursor(cur, 0);
-            lcd.write(TWOBARS);
-            lcd.setCursor(cur, 1);
-            lcd.write(EIGHTBARS);
+            //            lcd.setCursor(cur, 0);
+            //            lcd.write(TWOBARS);
+            //            lcd.setCursor(cur, 1);
+            //            lcd.write(EIGHTBARS);
+            rad_viz_line1[cur] = TWOBARS;
+            rad_viz_line2[cur] = EIGHTBARS;
             break;
           case 6:
-            lcd.setCursor(cur, 0);
-            lcd.write(FOURBARS);
-            lcd.setCursor(cur, 1);
-            lcd.write(EIGHTBARS);
+            //            lcd.setCursor(cur, 0);
+            //            lcd.write(FOURBARS);
+            //            lcd.setCursor(cur, 1);
+            //            lcd.write(EIGHTBARS);
+            rad_viz_line1[cur] = FOURBARS;
+            rad_viz_line2[cur] = EIGHTBARS;
             break;
           case 7:
-            lcd.setCursor(cur, 0);
-            lcd.write(SIXBARS);
-            lcd.setCursor(cur, 1);
-            lcd.write(EIGHTBARS);
+            //            lcd.setCursor(cur, 0);
+            //            lcd.write(SIXBARS);
+            //            lcd.setCursor(cur, 1);
+            //            lcd.write(EIGHTBARS);
+            rad_viz_line1[cur] = SIXBARS;
+            rad_viz_line2[cur] = EIGHTBARS;
             break;
           default:
-            lcd.setCursor(cur, 0);
-            lcd.write(EIGHTBARS);
-            lcd.setCursor(cur, 1);
-            lcd.write(EIGHTBARS);
+            //            lcd.setCursor(cur, 0);
+            //            lcd.write(EIGHTBARS);
+            //            lcd.setCursor(cur, 1);
+            //            lcd.write(EIGHTBARS);
+            rad_viz_line1[cur] = EIGHTBARS;
+            rad_viz_line2[cur] = EIGHTBARS;
             break;
         }
       }
     }
+    lcd.setCursor(0, 0);
+    lcd.print(rad_viz_line1);
+    lcd.setCursor(0, 1);
+    lcd.println(rad_viz_line2);
   }
 
 
   ////////////////////////////////////////////////////////////////
-
-
-  float cumul_variate = TrueRandom.random(1, 101) / 100.0;
-  float cumul = 0;
-
-  for (u8 i = 0; i < PARAM_scale_width; i++) {
-    cumul += markov_column[i] / column_total;
-    if (cumul >= cumul_variate) {
-      free(markov_column);
-      return i;
-    }
-  }
-  free(markov_column);
-  return PARAM_scale_width - 1;
 }
 
 
@@ -750,4 +782,45 @@ uint16_t rotate12Right(uint16_t n, uint16_t d) {
 
 int mod(int x, int m) {
   return (x % m + m) % m;
+}
+
+
+void input_and_play_semitone() {
+  static String inData;
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Tuning mode");
+
+  Serial.println("");
+  for (;;) {
+    char received = ' '; // Each character received
+    inData = ""; // Clear recieved buffer
+    Serial.print("Semitone: ");
+
+    while (received != '\n') { // When new line character is received (\n = LF, \r = CR)
+      if (Serial.available() > 0) // When character in serial buffer read it
+      {
+        received = Serial.read();
+        Serial.print(received); // Echo each received character, terminal dont need local echo
+        inData += received; // Add received character to inData buffer
+      }
+    }
+    inData.trim(); // Eliminate \n, \r, blank and other not “printable”
+    Serial.println();
+    MCP.setValue(inData.toInt());
+
+  }
+
+}
+
+
+uint32_t xorshift32(struct xorshift32_state *state)
+{
+  /* Algorithm "xor" from p. 4 of Marsaglia, "Xorshift RNGs" */
+  uint32_t x = state->a;
+  x ^= x << 13;
+  x ^= x >> 17;
+  x ^= x << 5;
+  return state->a = x;
 }

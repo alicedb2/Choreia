@@ -1,5 +1,12 @@
 #define u8 uint8_t
 #define u16 uint16_t
+#define u32 uint32_t
+
+#define MAXU32 4294967296
+
+struct xorshift32_state {
+  u32 a;
+};
 
 #define EMPTY_LINE "                "
 #define EMPTY_CHAR ' '
