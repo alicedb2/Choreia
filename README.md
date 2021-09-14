@@ -2,6 +2,8 @@
 
 Euclidean sequencer with in-scale Markov chain.
 
+[![Euclid and Markov GOTO rave](http://img.youtube.com/vi/w-94b--FuAA/0.jpg)](http://www.youtube.com/watch?v=w-94b--FuAA "Euclid and Markov GOTO rave")
+
 ### Jacks
 
 - **Input** Clock-in
