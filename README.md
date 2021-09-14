@@ -3,6 +3,7 @@
 Euclidean sequencer with in-scale Markov chain.
 
 [![Euclid and Markov GOTO rave](http://img.youtube.com/vi/w-94b--FuAA/0.jpg)](http://www.youtube.com/watch?v=w-94b--FuAA "Euclid and Markov GOTO rave")
+[![Euclid and Markov Got Drunk Again](http://img.youtube.com/vi/MoCvhjQ6Kq4/0.jpg)](http://www.youtube.com/watch?v=MoCvhjQ6Kq4 "Euclid and Markov Got Drunk Again")
 
 ### Jacks
 
