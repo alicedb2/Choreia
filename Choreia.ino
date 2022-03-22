@@ -17,26 +17,47 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 u16 markov_seed;
 
+// This seed is used to regenerate the random markov transition matrix 
+// from scratch at each note play
 xorshift32_state markov_rng_state;
 u32 markov_rng_seed;
 
+// This is used to draw transitions between notes, i.e. generate the bass line
+// Eventually we will use the seed to reset the sequence
+// of notes at each bar instead of just letting the bass line
+// evolve indefinitely
 xorshift32_state draw_rng_state;
 u32 draw_rng_seed;
 
-float *random_uniform_matrix;
-float *markov_matrix;
+// Note used anymore
+// float *random_uniform_matrix;
+// float *markov_matrix;
+
+// Holds the indexes of the first, second, third, etc semitones in scale.
+// So for chromatic its 0.1.2.3.4..., but e.g. for major it's 0.2.4.5.7.9.11...
+// It's as long as PARAM_scale_width and is generated using the scale template in PARAM_scale
 u8 *semitone_vector_in_scale;
 
+u8 current_note = 0; // What it says. It's the semitone that's currently played on the DAC
 
+
+bool startup = true; // indicate we are starting up and to initialize stuff.
+bool GLOBAL_refresh_display = true; // Sometimes we wish to refresh all the things (including we we are starting up)
+
+
+// Those parameters control the transition kernel
+// They are modified by the pots/encoders when in the "melodic" mode (switch on the front panel ON)
 u8 PARAM_scale_width = 4;
-float PARAM_scale_dispersion = 3.0;
-float PARAM_jump_to_first_neighbors = 1.33;
-float PARAM_jump_to_root = 0.33;
-float PARAM_repeat_note = 0.33;
-float PARAM_jump_to_second_neighbors = 1.00;
+float PARAM_scale_dispersion = 3.0;          // Controls how far subsequently played notes/semitones are from each other on average
+float PARAM_jump_to_first_neighbors = 1.33;  // Reweight how likely we are to jump to neighboring notes
+float PARAM_jump_to_root = 0.33;             // Reweight how likely we are to jump back to the root note
+float PARAM_repeat_note = 0.33;              // Reweight how likely we are to repeat the same note
+float PARAM_jump_to_second_neighbors = 1.00; // Reweight how likely we are to jump to second neighboring notes
+                                             // *** will eventually change that to jumping to the 5th
 
 // We save parameters after a switch flip so that
 // we can keep them where they were when we flip back
+// *** This whole gimmick will become unnecessary once we switch to rotary encoders
 u8 switched_PARAM_scale_width = 4;
 float switched_PARAM_scale_dispersion = 3.0;
 float switched_PARAM_jump_to_first_neighbors = 0.33;
@@ -45,23 +66,30 @@ float switched_PARAM_repeat_note = 0.33;
 float switched_PARAM_jump_to_second_neighbors = 1.0;
 
 
-
+// 
 char rad_viz_line1[17] = EMPTY_LINE;
 char rad_viz_line2[17] = EMPTY_LINE;
 
-u8 current_note = 0;
 
-bool sequencer_alternates = true;
-int8_t sequencer_direction = 1;
-int8_t sequencer_step, previous_sequencer_step;
+// There's no outside control for those yet
+// so it's hardcoded for now.
+bool sequencer_alternates = true;  // If true sequencer goes forward then backward
+int8_t sequencer_direction = 1; // 1 is forward, -1 is backward
+int8_t sequencer_step, previous_sequencer_step; // we need the previous sequencer step to correctly
+                                                // update the sequencer display 
+                                                // i.e. remove the underline from the previous step
+                                                //      when we advance.
 
-bool gate_events[16];
-volatile bool advance_sequencer = false;
+bool gate_events[16]; // 16 ZEROS and ONES, a transition from the previous note is drawn randomly and
+                      // the resulting note is played when theres a ONE at gate_events[sequencer_step]
+volatile bool advance_sequencer = false;  // volatile because it's modified during an interrupt
+                                          // when CLOCKIN_PIN goes high it's set to TRUE and the main loop
+                                          // does all its things (advance, transition, play note, update display)
 
-bool startup = true;
-bool GLOBAL_refresh_display = true;
-
-u8 PARAM_nb_euclidean_events = 17;
+// Those parameters control the beat
+// They are accessible in the sequencer mode when the switch on the front panel is OFF
+// ** I don't remember why I'm initializing them out of their range, weird
+u8 PARAM_nb_euclidean_events = 17; 
 u8 PARAM_nb_shadow_steps = 17;
 int8_t PARAM_sequence_rotation = 17;
 u8 PARAM_gate_probability = 101;
@@ -76,10 +104,11 @@ u8 switched_PARAM_gate_probability = 101;
 u8 switched_PARAM_scale_idx = 127;
 u8 switched_PARAM_root = 127;
 
-
+// Keeps the state of the switch on the front panel
+// which controls the mode we are in (melodic/sequencer)
 bool switch_state, last_switch_state;
 long unsigned int last_switch_change;
-bool fast_double_switch_change;
+bool fast_double_switch_change; // Did we quickly change the switch? If so generate a new markov transition matrix
 
 long unsigned int tic;
 
@@ -168,21 +197,26 @@ void setup() {
 
 
 void loop() {
-  //      Serial.print(digitalRead(CLOCKIN_PIN));
-  //  Serial.print("  ");
-  //  Serial.print(ADS.readADC(EUCL_PIN));
-  //  Serial.print("  ");
-  //  Serial.print(ADS.readADC(ROTATION_PIN));
-  //  Serial.print("  ");
-  //  Serial.print(ADS.readADC(SCALE_PIN));
-  //  Serial.print("  ");
-  //  Serial.print(ADS.readADC(SHADOW_PIN));
-  //  Serial.print("  ");
-  //  Serial.print(analogRead(ROOT_PIN));
-  //  Serial.print("  ");
-  //  Serial.println(analogRead(GATEPROB_PIN));
-  Serial.println(ADS.readADC(EUCL_PIN));
+
+// Debug stuff
+//  Serial.print(digitalRead(CLOCKIN_PIN));
+//  Serial.print("  ");
+//  Serial.print(ADS.readADC(EUCL_PIN));
+//  Serial.print("  ");
+//  Serial.print(ADS.readADC(ROTATION_PIN));
+//  Serial.print("  ");
+//  Serial.print(ADS.readADC(SCALE_PIN));
+//  Serial.print("  ");
+//  Serial.print(ADS.readADC(SHADOW_PIN));
+//  Serial.print("  ");
+//  Serial.print(analogRead(ROOT_PIN));
+//  Serial.print("  ");
+//  Serial.println(analogRead(GATEPROB_PIN));
+
   if (advance_sequencer) {
+
+    // Flip a biased coin to know if we play a note that's active in the euclidean sequence. 
+    // Should be moved inside the if.
     bool flip_a_coin = (1.0 * xorshift32(&draw_rng_state)) / MAXU32 <= PARAM_gate_probability / 100.0;
     if (gate_events[sequencer_step] && flip_a_coin) {
 
@@ -193,30 +227,32 @@ void loop() {
     if (switch_state) {
       display_step_indicator();
     }
-    update_sequencer_variables(); //must be after display
+    update_sequencer_variables(); // advance sequencer one step. must be called after display.
     advance_sequencer = false;
   }
 
   //////////// Save binned reading just after the switch change to detect
   //////////// the first time a pot moves after the switch changed.
+  //////////// This whole gimmick is ugly and we'll get ride of it with rotary encoders.
   //////////// Also keep track of switch state and of if it changed twice quickly
+  //////////// in which case we reseed the markov transition kernel
   last_switch_state = switch_state;
   switch_state = digitalRead(SWITCH_PIN);
   if (switch_state != last_switch_state) {
     if (switch_state) {
       // Save the parameters the moment we switch to the other mode
-      switched_PARAM_nb_euclidean_events = map(ADS.readADC(EUCL_PIN), 0, 25400, 0, 17);
-      switched_PARAM_nb_shadow_steps = map(ADS.readADC(SHADOW_PIN), 0, 25400, 0, 17);;
-      switched_PARAM_sequence_rotation =  map(ADS.readADC(ROTATION_PIN), 0, 25400, 0, 17);;
+      switched_PARAM_nb_euclidean_events = map(ADS.readADC(EUCL_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, 17);
+      switched_PARAM_nb_shadow_steps = map(ADS.readADC(SHADOW_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, 17);;
+      switched_PARAM_sequence_rotation =  map(ADS.readADC(ROTATION_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, 17);;
       switched_PARAM_gate_probability = map(analogRead(GATEPROB_PIN), 1023, -1, 0, 101);
-      switched_PARAM_scale_idx = map(ADS.readADC(SCALE_PIN), 0, 25400, 0, NUM_SCALES);;
+      switched_PARAM_scale_idx = map(ADS.readADC(SCALE_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, NUM_SCALES);;
       switched_PARAM_root = map(analogRead(ROOT_PIN), 0, 1023 + 1, 0, 13);//57);
     } else {
-      switched_PARAM_scale_width = map(ADS.readADC(SCALEWIDTH_PIN), 0, 25400, 1, 27);
-      switched_PARAM_scale_dispersion = pow(map(ADS.readADC(DISPERSION_PIN), 0, 25400, 100, -1) / 57.0, 4);
-      switched_PARAM_jump_to_first_neighbors = pow(map(ADS.readADC(FIRSTNEIGHBOR_PIN), 0, 25400, 0, 101) / 57.0, 4);
+      switched_PARAM_scale_width = map(ADS.readADC(SCALEWIDTH_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 1, 27);
+      switched_PARAM_scale_dispersion = pow(map(ADS.readADC(DISPERSION_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 100, -1) / 57.0, 4);
+      switched_PARAM_jump_to_first_neighbors = pow(map(ADS.readADC(FIRSTNEIGHBOR_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, 101) / 57.0, 4);
       switched_PARAM_jump_to_root = pow(map(analogRead(JUMPTOROOT_PIN), 0, 1023 + 1, 0, 101) / 57.0, 4);
-      switched_PARAM_repeat_note = pow(map(ADS.readADC(REPEATNOTE_PIN), 0, 25400, 0, 101) / 57.0, 4);
+      switched_PARAM_repeat_note = pow(map(ADS.readADC(REPEATNOTE_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, 101) / 57.0, 4);
       switched_PARAM_jump_to_second_neighbors = pow(map(analogRead(SECONDNEIGHBOR_PIN), 0, 1023 + 1, 100, -1) / 57.0, 4);
     }
 
@@ -257,6 +293,7 @@ void loop() {
 
 }
 
+// Move the little underbar from one step to the next
 void display_step_indicator () {
 
   if (switch_state && last_switch_state) {
@@ -308,14 +345,17 @@ void update_sequencer_variables() {
 
 void conditional_set_markovian_parameters(u16 dispersion_pin_read, u16 repeatnote_pin_read, u16 scalewidth_pin_read, u16 firstneighbor_pin_read, u16 jumptoroot_pin_read, u16 secondneighbor_pin_read) {
 
-  float binned_dispersion = pow(map(dispersion_pin_read, 0, 25400, 100, -1) / 57.0, 4);
-  float binned_repeatnote = pow(map(repeatnote_pin_read, 0, 25400, 0, 101) / 57.0, 4);
-  u8 binned_scalewidth = map(scalewidth_pin_read, 0, 25400, 1, 27); // Two chromatic octaves
-  float binned_firstneighbor = pow(map(firstneighbor_pin_read, 0, 25400, 0, 101) / 57.0, 4);
+  /// This (x/57)^4 thingy is to scale the digital read so that we curve differently between 0 to 1 and between 1 to whatever
+  /// This allow a little more precision between 0 and 1 compared to above 1.
+  float binned_dispersion = pow(map(dispersion_pin_read, 0, ADC_SLIGHTLY_ABOVE_5V, 100, -1) / 57.0, 4);
+  float binned_repeatnote = pow(map(repeatnote_pin_read, 0, ADC_SLIGHTLY_ABOVE_5V, 0, 101) / 57.0, 4);
+  u8 binned_scalewidth = map(scalewidth_pin_read, 0, ADC_SLIGHTLY_ABOVE_5V, 1, 27); // Up to two chromatic octaves
+  float binned_firstneighbor = pow(map(firstneighbor_pin_read, 0, ADC_SLIGHTLY_ABOVE_5V, 0, 101) / 57.0, 4);
   float binned_jumptoroot = pow(map(jumptoroot_pin_read, 0, 1023 + 1, 0, 51) / 28.5, 4);
   float binned_secondneighbor = pow(map(secondneighbor_pin_read, 0, 1023 + 1, 51, -1) / 28.5, 4);
 
 
+  /// So much bullshit because of the pots and the modes. Please switch to rotary encoders asap.
   if ((binned_dispersion != PARAM_scale_dispersion && binned_dispersion != switched_PARAM_scale_dispersion) || startup) {
     PARAM_scale_dispersion = binned_dispersion;
     switched_PARAM_scale_dispersion = binned_dispersion;
@@ -369,10 +409,13 @@ void conditional_set_markovian_parameters(u16 dispersion_pin_read, u16 repeatnot
 
 
 void conditional_set_and_display_euclidean_sequence(u16 eucl_pin_read, u16 shadow_pin_read, u16 rotation_pin_read) {
-  u8 binned_eucl = map(eucl_pin_read, 0, 25400, 0, 17);
-  u8 binned_shadow = map(shadow_pin_read, 0, 25400, 0, 17);
-  int8_t binned_rot = map(rotation_pin_read, 0, 25400, 0, 17);
-  bool update_me = false;
+  u8 binned_eucl = map(eucl_pin_read, 0, ADC_SLIGHTLY_ABOVE_5V, 0, 17);
+  u8 binned_shadow = map(shadow_pin_read, 0, ADC_SLIGHTLY_ABOVE_5V, 0, 17);
+  int8_t binned_rot = map(rotation_pin_read, 0, ADC_SLIGHTLY_ABOVE_5V, 0, 17);
+  
+  
+  bool update_me = false; // Track whether there's been a change in any of the sequencer parameter
+                          // in which case we refresh the display
 
   if ((binned_eucl != PARAM_nb_euclidean_events && binned_eucl != switched_PARAM_nb_euclidean_events) || startup) {
     PARAM_nb_euclidean_events = binned_eucl;
@@ -456,16 +499,16 @@ void conditional_set_and_display_gate_probability(u16 gateprob_pin_reading) {
 
 void conditional_set_and_display_scale(u16 scale_pin_read) {
 
-  u8 binned_read = map(scale_pin_read, 0, 25400, 0, NUM_SCALES);
+  u8 binned_read = map(scale_pin_read, 0, ADC_SLIGHTLY_ABOVE_5V, 0, NUM_SCALES);
   char scale_string[16];
   bool update_me = false;
 
   if ((binned_read != PARAM_scale_idx && binned_read != switched_PARAM_scale_idx) || startup) {
     PARAM_scale_idx = binned_read;
-    PARAM_scale = (u16)pgm_read_word_near(scales + PARAM_scale_idx);
+    PARAM_scale = (u16)pgm_read_word_near(scales + PARAM_scale_idx); // Get the binary encoded scale in PROGMEM
     switched_PARAM_scale_idx = binned_read;
     update_me = true;
-    Serial.println("regenerating");
+//    Serial.println("regenerating");
     regenerate_semitone_vector_in_scale();
     //    print_u8_vector(semitone_vector_in_scale, PARAM_scale_width);
   }
@@ -474,7 +517,7 @@ void conditional_set_and_display_scale(u16 scale_pin_read) {
   if (update_me || GLOBAL_refresh_display) {
 
     lcd.setCursor(0, 0);
-    strcpy_P(scale_string, (char *)pgm_read_word(&(short_scale_names[PARAM_scale_idx])));
+    strcpy_P(scale_string, (char *)pgm_read_word(&(short_scale_names[PARAM_scale_idx]))); // Get the scale name string in PROGMEM
     lcd.print(scale_string);
 
   }
@@ -521,15 +564,26 @@ void regenerate_gate_events(u8 nb_euclidean_events, u8 nb_shadow_steps, int8_t r
   }
 
   for (u8 k = 0; k < nb_euclidean_events; k++) {
+
+    ///////////////////////
+    /// Euclidean magic ///
+    ///////////////////////
+
+    // nb_shadow_steps adds some spice and break away from the 16 (plus empty) canonical euclidean sequences
+    // I don't think anyone else does that.
     event_location = (k * (16 + nb_shadow_steps)) / nb_euclidean_events;
-    if (event_location >= 16) break;
-    event_location = mod(event_location + rotation, 16);
+    if (event_location >= 16) break; // We only consider sequences with up to 16 (indexed 0 to 15) steps. 
+                                     // We could increase that in the future
+    event_location = mod(event_location + rotation, 16); // Rotate sequence to the right if necessary
     gate_events[event_location] = true;
+    
+    ///////////////////////
 
   }
 }
 
 
+// Generate vector of semitone indices given the binary encoded scale and the root note.
 void regenerate_semitone_vector_in_scale() {
   u8 vector_idx = 0;
   u8 semitone = PARAM_root;
@@ -570,33 +624,53 @@ void initialize_sequencer_variables() {
 
 }
 
-// Let's make the altorightm O(PARAM_scale_width) in space
+// Let's make the altorightm O(PARAM_scale_width) in memory
 // rather than generating a full markov matrix which
-// is O(PARAM_scale_width^2) in space and very restrictive.
+// is O(PARAM_scale_width^2) and thus very restrictive.
 void draw_and_play_note_from_markov_seed() {
   ///////// Regenerate markov column from the seed /////////
 
-  markov_rng_state = {markov_rng_seed};
-
   float *markov_column = (float *)malloc(sizeof(float[PARAM_scale_width]));
-
+    
   u8 initial_note = current_note;
 
+  // That's the trick for not having to store the full markov
+  // transition matrix with PARAM_scale_width^2 elements.
+  // Start from the seed and reach the first element of the column
+  // associated with the transition kernel from note/semitone initial_note to a new note/semitone.
+  // This way we always generate the same sequence of random elements in the markov transition matrix
+  markov_rng_state = {markov_rng_seed};
   for (u16 i = 0; i < initial_note * PARAM_scale_width; i++) {
     xorshift32(&markov_rng_state);
   }
 
+
   for (u8 i = 0; i < PARAM_scale_width; i++) {
+
+    // Start with a uniform kernel, namely set all elements of the transition
+    // kernel to a random number between 0 and 1 over the full scale width
     markov_column[i] = (1.0 * xorshift32(&markov_rng_state)) / MAXU32;
+
+    // Reweight flat kernel using a Cauchy kernel centered on the current note 
+    // https://en.wikipedia.org/wiki/Cauchy_distribution
+    // It's faster than Gaussian which would require exponentiation and stuff
+    // It's also more heavy-tailed, so gives more probability for more interesting jump to far notes
     markov_column[i] /= (3.141592 * PARAM_scale_dispersion);
     markov_column[i] /= 1.0 + pow(abs(i - initial_note) / PARAM_scale_dispersion, 2);
+
+    // Reweight kernel at first neighbors
     markov_column[i] *= abs(i - initial_note) % 2 ? PARAM_jump_to_first_neighbors : 1.0;
+
+    // Reweight kernel at second neighbor. Should be changed to the 5th in scale at some point.
     markov_column[i] *= abs(i - initial_note) % 3 == 2 ? PARAM_jump_to_second_neighbors : 1.0;
   }
 
+  // Reweight kernel for the transition to the root or to the same note
   markov_column[PARAM_root] *= PARAM_jump_to_root;
   markov_column[initial_note] *= PARAM_repeat_note;
 
+  // Renormalize column (i.e. the transition kernel) to 1
+  // (we'll do that by dividing by column_total below
   float column_total = 0.0;
   float max_element = 0.0;
   for (u8 i = 0; i < PARAM_scale_width; i++) {
@@ -604,7 +678,7 @@ void draw_and_play_note_from_markov_seed() {
     column_total += markov_column[i];
   }
 
-
+  // Randomly draw a jump from the transition kernel
   float cumul_variate = (1.0 * xorshift32(&draw_rng_state)) / MAXU32;
   float cumul = 0;
 
@@ -616,16 +690,17 @@ void draw_and_play_note_from_markov_seed() {
     }
   }
 
-  //  current_note =
+  // Play the new note to which we jumped to
   u8 semitone_to_play = semitone_vector_in_scale[current_note];
   MCP.setValue(semitone_cvs_dac[semitone_to_play]);
   digitalWrite(GATE_PIN, HIGH);
 
-
   free(markov_column);
 
 
-  ////////////////// TOTALLY RAD VISUALIZATION ///////////////////
+  ////////////////// TOTALLY RAD VISUALIZATION! //////////////////
+  ////////////////// (when in the melodic mode) //////////////////
+  // We basically draw a very coarse representation of the transition kernel
   if (!switch_state) {
 
     u8 binned_element;
@@ -735,6 +810,11 @@ void draw_and_play_note_from_markov_seed() {
 
 
 /////////// Interrupt functions ///////////
+// Set advance_sequencer to signal the main loop to advance the sequencer
+// Also the clock-in pin is used to control the duty-cycle
+// so that as long as its high the ouput GATE pin stays high
+// otherwise it goes low. The gate pin will be set high when
+// the main loop plays the note.
 void clock_change() {
   if (digitalRead(CLOCKIN_PIN) == HIGH) {
     advance_sequencer = true;
@@ -776,6 +856,9 @@ void print_u8_vector(u8 * vector, u8 n) {
 }
 
 
+// Shift the 12 least-significant bits of a uint16
+// which is useful to find the semitones of a scale
+// which we encoded in those bits.
 uint16_t rotate12Right(uint16_t n, uint16_t d) {
   return 0xfff & ((n >> (d % 12)) | (n << (12 - (d % 12))));
 }
@@ -785,6 +868,9 @@ int mod(int x, int m) {
 }
 
 
+// Used to tune the ADC (find the digital reads at exactly 1V/oct=83.3mV/semitone from each others)
+// and the DAC (this is done by ear using another tuned intrument or a tuner, find the digital values
+// corresponding to each semitone.
 void input_and_play_semitone() {
   static String inData;
 

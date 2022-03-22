@@ -4,6 +4,8 @@
 
 #define MAXU32 4294967296
 
+#define ADC_SLIGHTLY_ABOVE_5V 25400
+
 struct xorshift32_state {
   u32 a;
 };
@@ -32,12 +34,12 @@ struct xorshift32_state {
 #define EUCL_PIN 3
 #define DISPERSION_PIN 3
 
-// On analog pins
-#define ROOT_PIN A1
-#define JUMPTOROOT_PIN A1
+// Pots on analog pins
+#define ROOT_PIN A0
+#define JUMPTOROOT_PIN A0
 
-#define GATEPROB_PIN A2
-#define SECONDNEIGHBOR_PIN A2
+#define GATEPROB_PIN A1
+#define SECONDNEIGHBOR_PIN A1
 
 const uint16_t semitone_cvs_dac[57] = {
   6, // C2
@@ -102,32 +104,74 @@ const uint16_t semitone_cvs_dac[57] = {
 
 byte Filled_lowo[8] =
 {
-  0b00000, 0b00000, 0b01110, 0b11111, 0b11111, 0b11111, 0b01110, 0b00000
+  0b00000, 
+  0b00000, 
+  0b01110, 
+  0b11111,
+  0b11111, 
+  0b11111,
+  0b01110, 
+  0b00000
 };
 
 byte Filled_higho_underbar[8] =
 {
-  0b00000, 0b01110, 0b11111, 0b11111, 0b11111, 0b01110, 0b00000, 0b11111
+  0b00000, 
+  0b01110, 
+  0b11111, 
+  0b11111, 
+  0b11111,
+  0b01110, 
+  0b00000, 
+  0b11111
 };
 
  byte Underbar[8] =
 {
-  0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b11111
+  0b00000, 
+  0b00000, 
+  0b00000, 
+  0b00000, 
+  0b00000, 
+  0b00000, 
+  0b00000, 
+  0b11111
 };
 
 const byte Two_bars[8] =
 {
-  0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b11111, 0b11111
+  0b00000, 
+  0b00000, 
+  0b00000, 
+  0b00000, 
+  0b00000, 
+  0b00000, 
+  0b11111, 
+  0b11111
 };
 
 const byte Four_bars[8] =
 {
-  0b00000, 0b00000, 0b00000, 0b00000, 0b11111, 0b11111, 0b11111, 0b11111
+  0b00000, 
+  0b00000, 
+  0b00000, 
+  0b00000, 
+  0b11111, 
+  0b11111, 
+  0b11111, 
+  0b11111
 };
 
 const byte Six_bars[8] =
 {
-  0b00000, 0b00000, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111
+  0b00000, 
+  0b00000, 
+  0b11111, 
+  0b11111, 
+  0b11111, 
+  0b11111,
+  0b11111,
+  0b11111
 };
 
 
