@@ -239,14 +239,22 @@ void loop() {
   last_switch_state = switch_state;
   switch_state = digitalRead(SWITCH_PIN);
   if (switch_state != last_switch_state) {
-    if (switch_state) {
       // Save the parameters the moment we switch to the other mode
+    if (switch_state) {
+      // We want to bin from 0 to 16, so we map from 0 to 17 to circumvent the fact that map doesn't bin but linearly maps, 
+      // i.e. only the max of the input range maps to the max of the output range, so we put the max input range
+      // to something that the analog signal won't ever reach. There should be a bin(min_i, max_i, min_o, max_o) function.
       switched_PARAM_nb_euclidean_events = map(ADS.readADC(EUCL_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, 17);
-      switched_PARAM_nb_shadow_steps = map(ADS.readADC(SHADOW_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, 17);;
-      switched_PARAM_sequence_rotation =  map(ADS.readADC(ROTATION_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, 17);;
+      switched_PARAM_nb_shadow_steps = map(ADS.readADC(SHADOW_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, 17);
+      switched_PARAM_sequence_rotation =  map(ADS.readADC(ROTATION_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, 17);
+      
+      // I accidentally soldered that pot in reverse
       switched_PARAM_gate_probability = map(analogRead(GATEPROB_PIN), 1023, -1, 0, 101);
-      switched_PARAM_scale_idx = map(ADS.readADC(SCALE_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, NUM_SCALES);;
-      switched_PARAM_root = map(analogRead(ROOT_PIN), 0, 1023 + 1, 0, 13);//57);
+      
+      switched_PARAM_scale_idx = map(ADS.readADC(SCALE_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 0, NUM_SCALES);
+      
+      // Pots never reach 1024 so we never map to 13. This way we stay between C (idx 0) to C (idx 12)
+      switched_PARAM_root = map(analogRead(ROOT_PIN), 0, 1023 + 1, 0, 13);
     } else {
       switched_PARAM_scale_width = map(ADS.readADC(SCALEWIDTH_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 1, 27);
       switched_PARAM_scale_dispersion = pow(map(ADS.readADC(DISPERSION_PIN), 0, ADC_SLIGHTLY_ABOVE_5V, 100, -1) / 57.0, 4);
@@ -284,6 +292,7 @@ void loop() {
 
   }
 
+  // Reseed the markov transition matrix
   if (fast_double_switch_change) {
     markov_rng_seed = TrueRandom.random(0, 65536) * TrueRandom.random(0, 65536);
     fast_double_switch_change = false;
